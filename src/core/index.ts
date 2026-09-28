@@ -1,7 +1,7 @@
 import { bot } from "./bot.js";
 import commands from "../commands/index.js";
 import handlers from "../handlers/index.js";
-import { cleanupOldMessages, closeStore } from "../store/message-store.js";
+import { cleanupNotificationDetails, cleanupOldMessages, closeStore } from "../store/message-store.js";
 import { COMMANDS } from "../commands/list.js";
 import { OWNER_ID, RETENTION_DAYS } from "./config.js";
 
@@ -19,14 +19,20 @@ bot.catch((err) => {
 
 // Time-based retention cleanup: drop messages older than RETENTION_DAYS, on
 // start and hourly thereafter. Runs regardless of how many messages arrive.
-const RETENTION_MS = RETENTION_DAYS * 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const RETENTION_MS = RETENTION_DAYS * DAY_MS;
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+
+// Notification details only back the "Batafsil" button, so they expire well
+// before the archive itself does.
+const DETAILS_TTL_MS = 7 * DAY_MS;
 
 function runCleanup(): void {
   const removed = cleanupOldMessages(RETENTION_MS);
   if (removed > 0) {
     console.log(`🧹 Eskirgan ${removed} ta xabar o'chirildi`);
   }
+  cleanupNotificationDetails(DETAILS_TTL_MS);
 }
 
 runCleanup();

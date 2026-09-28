@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import path from "node:path";
 import fs from "node:fs";
+import { randomBytes } from "node:crypto";
 import type { User } from "grammy/types";
 import { DB_PATH, DEFAULT_TRACK_MODE, OWNER_ID } from "../core/config.js";
 
@@ -133,6 +134,21 @@ db.exec(`
     stored_at              INTEGER NOT NULL
   )
 `);
+// Collapsed and expanded text of a sent notification, so the "Batafsil" button
+// can toggle it later. Kept on its own short TTL because a deleted message's
+// row is purged from `messages` as soon as the notification is delivered.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS notification_details (
+    token      TEXT PRIMARY KEY,
+    chat_id    INTEGER NOT NULL,
+    compact    TEXT NOT NULL,
+    expanded   TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  )
+`);
+db.exec("CREATE INDEX IF NOT EXISTS idx_details_created ON notification_details (created_at)");
+db.exec("CREATE INDEX IF NOT EXISTS idx_details_chat ON notification_details (chat_id)");
+
 db.exec("CREATE INDEX IF NOT EXISTS idx_versions_key ON message_versions (key, version)");
 db.exec("CREATE INDEX IF NOT EXISTS idx_versions_stored_at ON message_versions (stored_at)");
 db.exec("CREATE INDEX IF NOT EXISTS idx_versions_chat ON message_versions (chat_id)");
@@ -202,6 +218,14 @@ const stmtDeleteVersionsByKey = db.prepare("DELETE FROM message_versions WHERE k
 const stmtDeleteVersionsByChat = db.prepare("DELETE FROM message_versions WHERE chat_id = ?");
 const stmtDeleteVersionsByConnection = db.prepare("DELETE FROM message_versions WHERE business_connection_id = ?");
 const stmtCleanupVersions = db.prepare("DELETE FROM message_versions WHERE stored_at < ?");
+
+const stmtInsertDetails = db.prepare(`
+  INSERT INTO notification_details (token, chat_id, compact, expanded, created_at)
+  VALUES (?, ?, ?, ?, ?)
+`);
+const stmtGetDetails = db.prepare("SELECT compact, expanded FROM notification_details WHERE token = ?");
+const stmtDeleteDetailsByChat = db.prepare("DELETE FROM notification_details WHERE chat_id = ?");
+const stmtCleanupDetails = db.prepare("DELETE FROM notification_details WHERE created_at < ?");
 
 function getKey(businessConnectionId: string, chatId: number, messageId: number): string {
   return `${businessConnectionId}:${chatId}:${messageId}`;
@@ -382,7 +406,33 @@ export function clearChatRule(chatId: number): void {
 /** Drop every stored message for one chat. Returns the number of deleted rows. */
 export function deleteMessagesByChat(chatId: number): number {
   stmtDeleteVersionsByChat.run(chatId);
+  stmtDeleteDetailsByChat.run(chatId);
   return stmtDeleteMessagesByChat.run(chatId).changes;
+}
+
+export interface NotificationDetails {
+  compact: string;
+  expanded: string;
+}
+
+/**
+ * Remembers both renderings of a notification and returns the token to put in
+ * the button's callback data.
+ */
+export function saveNotificationDetails(chatId: number, details: NotificationDetails): string {
+  const token = randomBytes(8).toString("hex");
+  stmtInsertDetails.run(token, chatId, details.compact, details.expanded, Date.now());
+  return token;
+}
+
+export function getNotificationDetails(token: string): NotificationDetails | undefined {
+  const row = stmtGetDetails.get(token) as { compact: string; expanded: string } | undefined;
+  return row ? { compact: row.compact, expanded: row.expanded } : undefined;
+}
+
+/** Deletes notification details older than `ttlMs`. Returns the deleted count. */
+export function cleanupNotificationDetails(ttlMs: number): number {
+  return stmtCleanupDetails.run(Date.now() - ttlMs).changes;
 }
 
 /** Escapes LIKE wildcards so a query is matched literally. */
