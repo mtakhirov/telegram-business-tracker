@@ -1,6 +1,6 @@
 import { Composer } from "grammy";
 import { getStoreSize } from "../../store/message-store.js";
-import { OWNER_ID } from "../../core/config.js";
+import { BOT_NAME, OWNER_ID } from "../../core/config.js";
 import { escapeHtml } from "../../utils/format.js";
 
 const composer = new Composer();
@@ -14,7 +14,7 @@ composer.command("start", async (ctx) => {
   if (payload && payload.startsWith("bizChat")) {
     const chatId = escapeHtml(payload.slice(7));
     await ctx.reply(
-      `🤖 <b>Business Chat Tracker</b>\n\n` +
+      `🤖 <b>${escapeHtml(BOT_NAME)}</b>\n\n` +
         `Chat <code>#${chatId}</code> boshqarilmoqda.\n\n` +
         `Bu bot business chatdagi barcha xabarlarni kuzatib boradi:\n` +
         `• ✏️ Tahrirlangan xabarlar\n` +
@@ -26,7 +26,7 @@ composer.command("start", async (ctx) => {
   }
 
   await ctx.reply(
-    `🤖 <b>Business Chat Tracker Bot</b>\n\n` +
+    `🤖 <b>${escapeHtml(BOT_NAME)}</b>\n\n` +
       `Bu bot Telegram Business orqali ulangan chatlardagi:\n` +
       `• ✏️ <b>Tahrirlangan</b> xabarlarni\n` +
       `• 🗑 <b>O'chirilgan</b> xabarlarni\n` +
