@@ -1,20 +1,17 @@
 /**
- * The archive: every table, query and retention rule in one place.
+ * The archive: every query and retention rule the bot runs.
  *
- * `messages` holds the latest state of each archived message, while
- * `message_versions` is an append-only chain of every edit, because a message
- * row is overwritten in place. `chats` records id, title and last-seen time for
- * every chat the bot observes — metadata only, never content — so `/chats` can
- * offer chats that are not archived yet. `chat_rules` stores per-chat archiving
- * decisions, and `notification_details` keeps the two renderings of a sent
- * notification so its expand button still works after the message row is gone.
+ * Tables are declared in `./schema.ts`; this module is the only place that
+ * reads or writes them, so the rest of the bot works with plain objects and
+ * never with rows.
  *
- * Every delete path reaches all of the tables that hold content, which is why
- * chat id and connection id are duplicated onto `message_versions` and
- * `notification_details`.
+ * Media and the sender are kept as JSON text because Telegram's shapes are
+ * large, nested and only ever read back whole. Content columns that are
+ * searched — `text` and `caption` — stay as real columns.
  *
- * The database holds other people's private messages, so the file is created
- * with mode 600 and its directory with 700.
+ * Every delete path reaches all of the tables that hold content: removing one
+ * message, one chat, one connection, or a retention sweep each drop the
+ * matching edit chain, and a chat also drops its notification details.
  *
  * @example
  * ```ts
@@ -25,12 +22,19 @@
  * ```
  */
 
-import { Database } from "bun:sqlite";
-import path from "node:path";
-import fs from "node:fs";
 import { randomBytes } from "node:crypto";
+import { and, asc, desc, eq, lt, sql } from "drizzle-orm";
 import type { User } from "grammy/types";
-import { DB_PATH, DEFAULT_TRACK_MODE, OWNER_ID } from "../core/config.js";
+import { DEFAULT_TRACK_MODE, OWNER_ID } from "../core/config.js";
+import { closeDb, db } from "./db.js";
+import {
+  businessConnections,
+  chatRules,
+  chats,
+  messageVersions,
+  messages,
+  notificationDetails,
+} from "./schema.js";
 
 export interface StoredMessage {
   messageId: number;
@@ -72,206 +76,79 @@ export interface StoredConnection {
   isEnabled: boolean;
 }
 
-process.umask(0o077);
+export type TrackMode = "allow" | "deny";
 
-const dbPath = path.resolve(DB_PATH);
-const dbDir = path.dirname(dbPath);
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true, mode: 0o700 });
+export interface KnownChat {
+  chatId: number;
+  title: string | null;
+  lastSeen: Date;
+  mode: TrackMode | null;
 }
 
-const db = new Database(dbPath);
-
-for (const file of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) {
-  try {
-    if (fs.existsSync(file)) fs.chmodSync(file, 0o600);
-  } catch {
-    console.warn(`Could not restrict permissions of ${file}`);
-  }
+export interface MessageVersion {
+  version: number;
+  text: string | null;
+  caption: string | null;
+  editDate: number | null;
+  storedAt: Date;
 }
 
-db.run("PRAGMA journal_mode = WAL;");
+export interface ExportedMessage extends StoredMessage {
+  versions: MessageVersion[];
+}
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS messages (
-    key TEXT PRIMARY KEY,
-    message_id INTEGER NOT NULL,
-    chat_id INTEGER NOT NULL,
-    business_connection_id TEXT NOT NULL,
-    from_json TEXT,
-    date INTEGER NOT NULL,
-    text TEXT,
-    caption TEXT,
-    photo TEXT,
-    video TEXT,
-    document TEXT,
-    sticker TEXT,
-    voice TEXT,
-    audio TEXT,
-    animation TEXT,
-    stored_at INTEGER NOT NULL
-  )
-`);
-db.exec("CREATE INDEX IF NOT EXISTS idx_messages_stored_at ON messages (stored_at)");
-db.exec("CREATE INDEX IF NOT EXISTS idx_messages_connection ON messages (business_connection_id)");
-db.exec("CREATE INDEX IF NOT EXISTS idx_messages_chat ON messages (chat_id, date)");
+export interface NotificationDetails {
+  compact: string;
+  expanded: string;
+}
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS business_connections (
-    id TEXT PRIMARY KEY,
-    user_id INTEGER NOT NULL,
-    is_enabled INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
-  )
-`);
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS chats (
-    chat_id   INTEGER PRIMARY KEY,
-    title     TEXT,
-    last_seen INTEGER NOT NULL
-  )
-`);
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS chat_rules (
-    chat_id    INTEGER PRIMARY KEY,
-    mode       TEXT NOT NULL CHECK (mode IN ('allow', 'deny')),
-    updated_at INTEGER NOT NULL
-  )
-`);
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS message_versions (
-    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
-    key                    TEXT NOT NULL,
-    chat_id                INTEGER NOT NULL,
-    business_connection_id TEXT NOT NULL,
-    version                INTEGER NOT NULL,
-    text                   TEXT,
-    caption                TEXT,
-    edit_date              INTEGER,
-    stored_at              INTEGER NOT NULL
-  )
-`);
-db.exec(`
-  CREATE TABLE IF NOT EXISTS notification_details (
-    token      TEXT PRIMARY KEY,
-    chat_id    INTEGER NOT NULL,
-    compact    TEXT NOT NULL,
-    expanded   TEXT NOT NULL,
-    created_at INTEGER NOT NULL
-  )
-`);
-db.exec("CREATE INDEX IF NOT EXISTS idx_details_created ON notification_details (created_at)");
-db.exec("CREATE INDEX IF NOT EXISTS idx_details_chat ON notification_details (chat_id)");
-
-db.exec("CREATE INDEX IF NOT EXISTS idx_versions_key ON message_versions (key, version)");
-db.exec("CREATE INDEX IF NOT EXISTS idx_versions_stored_at ON message_versions (stored_at)");
-db.exec("CREATE INDEX IF NOT EXISTS idx_versions_chat ON message_versions (chat_id)");
-db.exec("CREATE INDEX IF NOT EXISTS idx_versions_connection ON message_versions (business_connection_id)");
-
-const stmtGet = db.prepare("SELECT * FROM messages WHERE key = ?");
-const stmtInsert = db.prepare(`
-  INSERT OR REPLACE INTO messages (key, message_id, chat_id, business_connection_id, from_json, date, text, caption, photo, video, document, sticker, voice, audio, animation, stored_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`);
-const stmtDelete = db.prepare("DELETE FROM messages WHERE key = ?");
-const stmtDeleteByConnection = db.prepare("DELETE FROM messages WHERE business_connection_id = ?");
-const stmtCount = db.prepare("SELECT COUNT(*) as count FROM messages");
-const stmtCleanup = db.prepare("DELETE FROM messages WHERE stored_at < ?");
-
-const stmtGetConnection = db.prepare("SELECT * FROM business_connections WHERE id = ?");
-const stmtOwnerConnection = db.prepare(
-  "SELECT id FROM business_connections WHERE user_id = ? AND is_enabled = 1 ORDER BY updated_at DESC LIMIT 1",
-);
-const stmtUpsertConnection = db.prepare(`
-  INSERT OR REPLACE INTO business_connections (id, user_id, is_enabled, updated_at)
-  VALUES (?, ?, ?, ?)
-`);
-
-const stmtTouchChat = db.prepare(`
-  INSERT INTO chats (chat_id, title, last_seen) VALUES (?, ?, ?)
-  ON CONFLICT (chat_id) DO UPDATE SET title = excluded.title, last_seen = excluded.last_seen
-`);
-const stmtListChats = db.prepare(`
-  SELECT c.chat_id, c.title, c.last_seen, r.mode
-  FROM chats c LEFT JOIN chat_rules r ON r.chat_id = c.chat_id
-  ORDER BY c.last_seen DESC
-`);
-const stmtGetChatRule = db.prepare("SELECT mode FROM chat_rules WHERE chat_id = ?");
-const stmtSetChatRule = db.prepare(`
-  INSERT INTO chat_rules (chat_id, mode, updated_at) VALUES (?, ?, ?)
-  ON CONFLICT (chat_id) DO UPDATE SET mode = excluded.mode, updated_at = excluded.updated_at
-`);
-const stmtDeleteChatRule = db.prepare("DELETE FROM chat_rules WHERE chat_id = ?");
-const stmtDeleteMessagesByChat = db.prepare("DELETE FROM messages WHERE chat_id = ?");
-
-const stmtSearch = db.prepare(`
-  SELECT * FROM messages
-  WHERE text LIKE ? ESCAPE '\\' OR caption LIKE ? ESCAPE '\\'
-  ORDER BY date DESC LIMIT ?
-`);
-const stmtChatMessages = db.prepare("SELECT * FROM messages WHERE chat_id = ? ORDER BY date DESC LIMIT ?");
-
-const stmtExportAll = db.prepare("SELECT * FROM messages ORDER BY date ASC");
-const stmtExportByChat = db.prepare("SELECT * FROM messages WHERE chat_id = ? ORDER BY date ASC");
-const stmtExportVersionsAll = db.prepare("SELECT * FROM message_versions ORDER BY key, version ASC");
-const stmtExportVersionsByChat = db.prepare(
-  "SELECT * FROM message_versions WHERE chat_id = ? ORDER BY key, version ASC",
-);
-
-const stmtLatestVersion = db.prepare(
-  "SELECT version, text, caption FROM message_versions WHERE key = ? ORDER BY version DESC LIMIT 1",
-);
-const stmtInsertVersion = db.prepare(`
-  INSERT INTO message_versions (key, chat_id, business_connection_id, version, text, caption, edit_date, stored_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-`);
-const stmtListVersions = db.prepare(
-  "SELECT version, text, caption, edit_date, stored_at FROM message_versions WHERE key = ? ORDER BY version ASC",
-);
-const stmtDeleteVersionsByKey = db.prepare("DELETE FROM message_versions WHERE key = ?");
-const stmtDeleteVersionsByChat = db.prepare("DELETE FROM message_versions WHERE chat_id = ?");
-const stmtDeleteVersionsByConnection = db.prepare(
-  "DELETE FROM message_versions WHERE business_connection_id = ?",
-);
-const stmtCleanupVersions = db.prepare("DELETE FROM message_versions WHERE stored_at < ?");
-
-const stmtInsertDetails = db.prepare(`
-  INSERT INTO notification_details (token, chat_id, compact, expanded, created_at)
-  VALUES (?, ?, ?, ?, ?)
-`);
-const stmtGetDetails = db.prepare("SELECT compact, expanded FROM notification_details WHERE token = ?");
-const stmtDeleteDetailsByChat = db.prepare("DELETE FROM notification_details WHERE chat_id = ?");
-const stmtCleanupDetails = db.prepare("DELETE FROM notification_details WHERE created_at < ?");
+type MessageRow = typeof messages.$inferSelect;
+type VersionRow = typeof messageVersions.$inferSelect;
 
 function getKey(businessConnectionId: string, chatId: number, messageId: number): string {
   return `${businessConnectionId}:${chatId}:${messageId}`;
 }
 
 function toJson(value: unknown): string | null {
-  return value != null ? JSON.stringify(value) : null;
+  return value == null ? null : JSON.stringify(value);
 }
 
-function rowToStoredMessage(row: Record<string, unknown>): StoredMessage {
+function fromJson<T>(value: string | null): T | null {
+  return value ? (JSON.parse(value) as T) : null;
+}
+
+function toStoredMessage(row: MessageRow): StoredMessage {
   return {
-    messageId: row.message_id as number,
-    chatId: row.chat_id as number,
-    businessConnectionId: row.business_connection_id as string,
-    from: row.from_json ? JSON.parse(row.from_json as string) : undefined,
-    date: row.date as number,
-    text: (row.text as string) || null,
-    caption: (row.caption as string) || null,
-    photo: row.photo ? JSON.parse(row.photo as string) : null,
-    video: row.video ? JSON.parse(row.video as string) : null,
-    document: row.document ? JSON.parse(row.document as string) : null,
-    sticker: row.sticker ? JSON.parse(row.sticker as string) : null,
-    voice: row.voice ? JSON.parse(row.voice as string) : null,
-    audio: row.audio ? JSON.parse(row.audio as string) : null,
-    animation: row.animation ? JSON.parse(row.animation as string) : null,
-    storedAt: new Date(row.stored_at as number),
+    messageId: row.messageId,
+    chatId: row.chatId,
+    businessConnectionId: row.businessConnectionId,
+    from: fromJson<User>(row.fromJson) ?? undefined,
+    date: row.date,
+    text: row.text,
+    caption: row.caption,
+    photo: fromJson<unknown[]>(row.photo),
+    video: fromJson<unknown>(row.video),
+    document: fromJson<{ file_name?: string }>(row.document),
+    sticker: fromJson<{ emoji?: string }>(row.sticker),
+    voice: fromJson<unknown>(row.voice),
+    audio: fromJson<{ title?: string }>(row.audio),
+    animation: fromJson<unknown>(row.animation),
+    storedAt: new Date(row.storedAt),
   };
+}
+
+function toMessageVersion(row: VersionRow): MessageVersion {
+  return {
+    version: row.version,
+    text: row.text,
+    caption: row.caption,
+    editDate: row.editDate,
+    storedAt: new Date(row.storedAt),
+  };
+}
+
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
 }
 
 export function getMessage(
@@ -279,10 +156,12 @@ export function getMessage(
   chatId: number,
   messageId: number,
 ): StoredMessage | undefined {
-  const row = stmtGet.get(getKey(businessConnectionId, chatId, messageId)) as
-    | Record<string, unknown>
-    | undefined;
-  return row ? rowToStoredMessage(row) : undefined;
+  const row = db
+    .select()
+    .from(messages)
+    .where(eq(messages.key, getKey(businessConnectionId, chatId, messageId)))
+    .get();
+  return row ? toStoredMessage(row) : undefined;
 }
 
 function appendVersion(
@@ -294,214 +173,171 @@ function appendVersion(
 ): void {
   const text = message.text || null;
   const caption = message.caption || null;
-  const latest = stmtLatestVersion.get(key) as
-    | { version: number; text: string | null; caption: string | null }
-    | undefined;
+
+  const latest = db
+    .select({
+      version: messageVersions.version,
+      text: messageVersions.text,
+      caption: messageVersions.caption,
+    })
+    .from(messageVersions)
+    .where(eq(messageVersions.key, key))
+    .orderBy(desc(messageVersions.version))
+    .limit(1)
+    .get();
 
   if (latest && latest.text === text && latest.caption === caption) return;
 
-  stmtInsertVersion.run(
-    key,
-    chatId,
-    businessConnectionId,
-    (latest?.version ?? 0) + 1,
-    text,
-    caption,
-    message.edit_date ?? null,
-    now,
-  );
+  db.insert(messageVersions)
+    .values({
+      key,
+      chatId,
+      businessConnectionId,
+      version: (latest?.version ?? 0) + 1,
+      text,
+      caption,
+      editDate: message.edit_date ?? null,
+      storedAt: now,
+    })
+    .run();
 }
 
 export function storeMessage(businessConnectionId: string, chatId: number, message: IncomingMessage): void {
   const key = getKey(businessConnectionId, chatId, message.message_id);
   const now = Date.now();
 
-  stmtInsert.run(
-    key,
-    message.message_id,
-    chatId,
-    businessConnectionId,
-    toJson(message.from),
-    message.date,
-    message.text || null,
-    message.caption || null,
-    toJson(message.photo),
-    toJson(message.video),
-    toJson(message.document),
-    toJson(message.sticker),
-    toJson(message.voice),
-    toJson(message.audio),
-    toJson(message.animation),
-    now,
-  );
+  db.insert(messages)
+    .values({
+      key,
+      messageId: message.message_id,
+      chatId,
+      businessConnectionId,
+      fromJson: toJson(message.from),
+      date: message.date,
+      text: message.text || null,
+      caption: message.caption || null,
+      photo: toJson(message.photo),
+      video: toJson(message.video),
+      document: toJson(message.document),
+      sticker: toJson(message.sticker),
+      voice: toJson(message.voice),
+      audio: toJson(message.audio),
+      animation: toJson(message.animation),
+      storedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: messages.key,
+      set: {
+        fromJson: toJson(message.from),
+        date: message.date,
+        text: message.text || null,
+        caption: message.caption || null,
+        photo: toJson(message.photo),
+        video: toJson(message.video),
+        document: toJson(message.document),
+        sticker: toJson(message.sticker),
+        voice: toJson(message.voice),
+        audio: toJson(message.audio),
+        animation: toJson(message.animation),
+        storedAt: now,
+      },
+    })
+    .run();
 
   appendVersion(key, businessConnectionId, chatId, message, now);
 }
 
 export function deleteMessage(businessConnectionId: string, chatId: number, messageId: number): void {
   const key = getKey(businessConnectionId, chatId, messageId);
-  stmtDelete.run(key);
-  stmtDeleteVersionsByKey.run(key);
+  db.delete(messages).where(eq(messages.key, key)).run();
+  db.delete(messageVersions).where(eq(messageVersions.key, key)).run();
 }
 
 export function deleteMessagesByConnection(businessConnectionId: string): number {
-  stmtDeleteVersionsByConnection.run(businessConnectionId);
-  return stmtDeleteByConnection.run(businessConnectionId).changes;
+  db.delete(messageVersions).where(eq(messageVersions.businessConnectionId, businessConnectionId)).run();
+  return db
+    .delete(messages)
+    .where(eq(messages.businessConnectionId, businessConnectionId))
+    .returning({ key: messages.key })
+    .all().length;
+}
+
+export function deleteMessagesByChat(chatId: number): number {
+  db.delete(messageVersions).where(eq(messageVersions.chatId, chatId)).run();
+  db.delete(notificationDetails).where(eq(notificationDetails.chatId, chatId)).run();
+  return db.delete(messages).where(eq(messages.chatId, chatId)).returning({ key: messages.key }).all().length;
 }
 
 export function cleanupOldMessages(retentionMs: number): number {
   const cutoff = Date.now() - retentionMs;
-  stmtCleanupVersions.run(cutoff);
-  return stmtCleanup.run(cutoff).changes;
+  db.delete(messageVersions).where(lt(messageVersions.storedAt, cutoff)).run();
+  return db.delete(messages).where(lt(messages.storedAt, cutoff)).returning({ key: messages.key }).all()
+    .length;
 }
 
 export function getStoreSize(): number {
-  return (stmtCount.get() as { count: number }).count;
-}
-
-export function getConnection(id: string): StoredConnection | undefined {
-  const row = stmtGetConnection.get(id) as Record<string, unknown> | undefined;
-  if (!row) return undefined;
-  return {
-    id: row.id as string,
-    userId: row.user_id as number,
-    isEnabled: Boolean(row.is_enabled),
-  };
-}
-
-export function saveConnection(conn: StoredConnection): void {
-  stmtUpsertConnection.run(conn.id, conn.userId, conn.isEnabled ? 1 : 0, Date.now());
-}
-
-export function isOwnerConnection(id: string): boolean {
-  const conn = getConnection(id);
-  return !!conn && conn.userId === OWNER_ID && conn.isEnabled;
-}
-
-export function getOwnerConnectionId(): string | undefined {
-  const row = stmtOwnerConnection.get(OWNER_ID) as { id: string } | undefined;
-  return row?.id;
-}
-
-export type TrackMode = "allow" | "deny";
-
-export interface KnownChat {
-  chatId: number;
-  title: string | null;
-  lastSeen: Date;
-  mode: TrackMode | null;
-}
-
-export function touchChat(chatId: number, title: string | null): void {
-  stmtTouchChat.run(chatId, title, Date.now());
-}
-
-export function isChatTracked(chatId: number): boolean {
-  const row = stmtGetChatRule.get(chatId) as { mode: TrackMode } | undefined;
-  return (row?.mode ?? DEFAULT_TRACK_MODE) === "allow";
-}
-
-export function listChats(): KnownChat[] {
-  const rows = stmtListChats.all() as Record<string, unknown>[];
-  return rows.map((row) => ({
-    chatId: row.chat_id as number,
-    title: (row.title as string) || null,
-    lastSeen: new Date(row.last_seen as number),
-    mode: (row.mode as TrackMode) ?? null,
-  }));
-}
-
-export function setChatRule(chatId: number, mode: TrackMode): void {
-  stmtSetChatRule.run(chatId, mode, Date.now());
-}
-
-export function clearChatRule(chatId: number): void {
-  stmtDeleteChatRule.run(chatId);
-}
-
-export function deleteMessagesByChat(chatId: number): number {
-  stmtDeleteVersionsByChat.run(chatId);
-  stmtDeleteDetailsByChat.run(chatId);
-  return stmtDeleteMessagesByChat.run(chatId).changes;
-}
-
-export interface NotificationDetails {
-  compact: string;
-  expanded: string;
-}
-
-export function saveNotificationDetails(chatId: number, details: NotificationDetails): string {
-  const token = randomBytes(8).toString("hex");
-  stmtInsertDetails.run(token, chatId, details.compact, details.expanded, Date.now());
-  return token;
-}
-
-export function getNotificationDetails(token: string): NotificationDetails | undefined {
-  const row = stmtGetDetails.get(token) as { compact: string; expanded: string } | undefined;
-  return row ? { compact: row.compact, expanded: row.expanded } : undefined;
-}
-
-export function cleanupNotificationDetails(ttlMs: number): number {
-  return stmtCleanupDetails.run(Date.now() - ttlMs).changes;
-}
-
-function escapeLike(value: string): string {
-  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+  const row = db
+    .select({ count: sql<number>`count(*)` })
+    .from(messages)
+    .get();
+  return row?.count ?? 0;
 }
 
 export function searchMessages(query: string, limit: number): StoredMessage[] {
   const pattern = `%${escapeLike(query)}%`;
-  const rows = stmtSearch.all(pattern, pattern, limit) as Record<string, unknown>[];
-  return rows.map(rowToStoredMessage);
+  return db
+    .select()
+    .from(messages)
+    .where(
+      sql`${messages.text} LIKE ${pattern} ESCAPE '\\' OR ${messages.caption} LIKE ${pattern} ESCAPE '\\'`,
+    )
+    .orderBy(desc(messages.date))
+    .limit(limit)
+    .all()
+    .map(toStoredMessage);
 }
 
 export function listChatMessages(chatId: number, limit: number): StoredMessage[] {
-  const rows = stmtChatMessages.all(chatId, limit) as Record<string, unknown>[];
-  return rows.map(rowToStoredMessage);
-}
-
-export interface MessageVersion {
-  version: number;
-  text: string | null;
-  caption: string | null;
-  editDate: number | null;
-  storedAt: Date;
-}
-
-function rowToMessageVersion(row: Record<string, unknown>): MessageVersion {
-  return {
-    version: row.version as number,
-    text: (row.text as string) || null,
-    caption: (row.caption as string) || null,
-    editDate: (row.edit_date as number) ?? null,
-    storedAt: new Date(row.stored_at as number),
-  };
-}
-
-export interface ExportedMessage extends StoredMessage {
-  versions: MessageVersion[];
+  return db
+    .select()
+    .from(messages)
+    .where(eq(messages.chatId, chatId))
+    .orderBy(desc(messages.date))
+    .limit(limit)
+    .all()
+    .map(toStoredMessage);
 }
 
 export function exportMessages(chatId?: number): ExportedMessage[] {
-  const messageRows = (chatId === undefined ? stmtExportAll.all() : stmtExportByChat.all(chatId)) as Record<
-    string,
-    unknown
-  >[];
-  const versionRows = (
-    chatId === undefined ? stmtExportVersionsAll.all() : stmtExportVersionsByChat.all(chatId)
-  ) as Record<string, unknown>[];
+  const messageRows =
+    chatId === undefined
+      ? db.select().from(messages).orderBy(asc(messages.date)).all()
+      : db.select().from(messages).where(eq(messages.chatId, chatId)).orderBy(asc(messages.date)).all();
+
+  const versionRows =
+    chatId === undefined
+      ? db
+          .select()
+          .from(messageVersions)
+          .orderBy(asc(messageVersions.key), asc(messageVersions.version))
+          .all()
+      : db
+          .select()
+          .from(messageVersions)
+          .where(eq(messageVersions.chatId, chatId))
+          .orderBy(asc(messageVersions.key), asc(messageVersions.version))
+          .all();
 
   const versionsByKey = new Map<string, MessageVersion[]>();
   for (const row of versionRows) {
-    const key = row.key as string;
-    const list = versionsByKey.get(key) ?? [];
-    list.push(rowToMessageVersion(row));
-    versionsByKey.set(key, list);
+    const list = versionsByKey.get(row.key) ?? [];
+    list.push(toMessageVersion(row));
+    versionsByKey.set(row.key, list);
   }
 
   const exported: ExportedMessage[] = [];
   for (const row of messageRows) {
-    const message = rowToStoredMessage(row);
+    const message = toStoredMessage(row);
     const key = getKey(message.businessConnectionId, message.chatId, message.messageId);
     exported.push(Object.assign(message, { versions: versionsByKey.get(key) ?? [] }));
   }
@@ -513,13 +349,116 @@ export function getVersions(
   chatId: number,
   messageId: number,
 ): MessageVersion[] {
-  const rows = stmtListVersions.all(getKey(businessConnectionId, chatId, messageId)) as Record<
-    string,
-    unknown
-  >[];
-  return rows.map(rowToMessageVersion);
+  return db
+    .select()
+    .from(messageVersions)
+    .where(eq(messageVersions.key, getKey(businessConnectionId, chatId, messageId)))
+    .orderBy(asc(messageVersions.version))
+    .all()
+    .map(toMessageVersion);
+}
+
+export function getConnection(id: string): StoredConnection | undefined {
+  const row = db.select().from(businessConnections).where(eq(businessConnections.id, id)).get();
+  return row ? { id: row.id, userId: row.userId, isEnabled: row.isEnabled } : undefined;
+}
+
+export function saveConnection(conn: StoredConnection): void {
+  db.insert(businessConnections)
+    .values({ id: conn.id, userId: conn.userId, isEnabled: conn.isEnabled, updatedAt: Date.now() })
+    .onConflictDoUpdate({
+      target: businessConnections.id,
+      set: { userId: conn.userId, isEnabled: conn.isEnabled, updatedAt: Date.now() },
+    })
+    .run();
+}
+
+export function isOwnerConnection(id: string): boolean {
+  const conn = getConnection(id);
+  return !!conn && conn.userId === OWNER_ID && conn.isEnabled;
+}
+
+export function getOwnerConnectionId(): string | undefined {
+  const row = db
+    .select({ id: businessConnections.id })
+    .from(businessConnections)
+    .where(and(eq(businessConnections.userId, OWNER_ID), eq(businessConnections.isEnabled, true)))
+    .orderBy(desc(businessConnections.updatedAt))
+    .limit(1)
+    .get();
+  return row?.id;
+}
+
+export function touchChat(chatId: number, title: string | null): void {
+  const lastSeen = Date.now();
+  db.insert(chats)
+    .values({ chatId, title, lastSeen })
+    .onConflictDoUpdate({ target: chats.chatId, set: { title, lastSeen } })
+    .run();
+}
+
+export function isChatTracked(chatId: number): boolean {
+  const row = db.select({ mode: chatRules.mode }).from(chatRules).where(eq(chatRules.chatId, chatId)).get();
+  return (row?.mode ?? DEFAULT_TRACK_MODE) === "allow";
+}
+
+export function listChats(): KnownChat[] {
+  return db
+    .select({
+      chatId: chats.chatId,
+      title: chats.title,
+      lastSeen: chats.lastSeen,
+      mode: chatRules.mode,
+    })
+    .from(chats)
+    .leftJoin(chatRules, eq(chatRules.chatId, chats.chatId))
+    .orderBy(desc(chats.lastSeen))
+    .all()
+    .map((row) => ({
+      chatId: row.chatId,
+      title: row.title,
+      lastSeen: new Date(row.lastSeen),
+      mode: row.mode,
+    }));
+}
+
+export function setChatRule(chatId: number, mode: TrackMode): void {
+  const updatedAt = Date.now();
+  db.insert(chatRules)
+    .values({ chatId, mode, updatedAt })
+    .onConflictDoUpdate({ target: chatRules.chatId, set: { mode, updatedAt } })
+    .run();
+}
+
+export function clearChatRule(chatId: number): void {
+  db.delete(chatRules).where(eq(chatRules.chatId, chatId)).run();
+}
+
+export function saveNotificationDetails(chatId: number, details: NotificationDetails): string {
+  const token = randomBytes(8).toString("hex");
+  db.insert(notificationDetails)
+    .values({ token, chatId, compact: details.compact, expanded: details.expanded, createdAt: Date.now() })
+    .run();
+  return token;
+}
+
+export function getNotificationDetails(token: string): NotificationDetails | undefined {
+  const row = db
+    .select({ compact: notificationDetails.compact, expanded: notificationDetails.expanded })
+    .from(notificationDetails)
+    .where(eq(notificationDetails.token, token))
+    .get();
+  return row ? { compact: row.compact, expanded: row.expanded } : undefined;
+}
+
+export function cleanupNotificationDetails(ttlMs: number): number {
+  return db
+    .delete(notificationDetails)
+    .where(lt(notificationDetails.createdAt, Date.now() - ttlMs))
+    .returning({ token: notificationDetails.token })
+    .all().length;
 }
 
 export function closeStore(): void {
-  db.close();
+  closeDb();
 }

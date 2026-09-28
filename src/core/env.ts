@@ -18,6 +18,7 @@
  * ```
  */
 
+// oxlint-disable-next-line import/no-unassigned-import
 import "dotenv/config";
 import { defineEnv } from "envin";
 import * as z from "zod";
