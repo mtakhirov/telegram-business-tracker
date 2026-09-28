@@ -34,39 +34,37 @@ export function splitText(text: string, limit = MAX_MESSAGE_LENGTH): string[] {
 }
 
 /**
- * Wrap raw (unescaped) content in one or more `<blockquote>` blocks, each of
- * which renders within `limit` characters.
+ * Escapes raw content and splits it into blocks that each render within
+ * `limit`. Returns nothing for empty content.
  */
-export function quote(rawContent: string, limit = MAX_MESSAGE_LENGTH): string[] {
+export function contentBlocks(rawContent: string, limit = MAX_MESSAGE_LENGTH): string[] {
   if (!rawContent) return [];
-  const wrapperLen = "<blockquote></blockquote>".length;
-  const inner = Math.max(1, limit - wrapperLen);
-  return splitText(escapeHtml(rawContent), inner).map((piece) => `<blockquote>${piece}</blockquote>`);
+  return splitText(escapeHtml(rawContent), limit);
 }
 
-/** Wraps content in `<blockquote><s>…</s></blockquote>` blocks within `limit`. */
-function struckQuote(rawContent: string, limit: number): string[] {
-  const wrapperLen = "<blockquote><s></s></blockquote>".length;
+/** Wraps content in `<s>…</s>` blocks that each render within `limit`. */
+function struckBlocks(rawContent: string, limit: number): string[] {
+  const wrapperLen = "<s></s>".length;
   const inner = Math.max(1, limit - wrapperLen);
-  return splitText(escapeHtml(rawContent), inner).map((piece) => `<blockquote><s>${piece}</s></blockquote>`);
+  return splitText(escapeHtml(rawContent), inner).map((piece) => `<s>${piece}</s>`);
 }
 
 /**
  * Renders an edit as struck-through old content above the new content. Both fit
- * one blockquote when short; otherwise each side gets its own blocks, so a
- * `<s>` tag is never split across messages.
+ * one block when short; otherwise each side gets its own blocks, so a `<s>` tag
+ * is never split across messages.
  */
-export function quoteDiff(
+export function diffBlocks(
   oldContent: string | null,
   newContent: string,
   limit = MAX_MESSAGE_LENGTH,
 ): string[] {
-  if (!oldContent) return quote(newContent, limit);
+  if (!oldContent) return contentBlocks(newContent, limit);
 
-  const combined = `<blockquote><s>${escapeHtml(oldContent)}</s>\n${escapeHtml(newContent)}</blockquote>`;
+  const combined = `<s>${escapeHtml(oldContent)}</s>\n${escapeHtml(newContent)}`;
   if (combined.length <= limit) return [combined];
 
-  return [...struckQuote(oldContent, limit), ...quote(newContent, limit)];
+  return [...struckBlocks(oldContent, limit), ...contentBlocks(newContent, limit)];
 }
 
 /**

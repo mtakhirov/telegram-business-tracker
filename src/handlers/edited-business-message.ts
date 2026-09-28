@@ -4,7 +4,7 @@ import { getMessage, storeMessage, isOwnerConnection, isChatTracked } from "../s
 import { getUserDisplayName, formatWhenSeconds, getMediaInfo } from "../utils/format.js";
 import { chatLabel, eventHeader, metaLine, withNote } from "../utils/notify-format.js";
 import { sendMediaWithBlocks } from "../utils/send-media.js";
-import { quoteDiff, sendBlocks } from "../utils/telegram-limits.js";
+import { diffBlocks, sendBlocks } from "../utils/telegram-limits.js";
 
 const composer = new Composer();
 
@@ -35,7 +35,7 @@ composer.on("edited_business_message", async (ctx) => {
   const oldContent = original ? original.text || original.caption || null : null;
   const newContent = editedMsg.text || editedMsg.caption || "";
 
-  let blocks = quoteDiff(oldContent, newContent);
+  let blocks = diffBlocks(oldContent, newContent);
   if (!original) blocks = withNote(blocks, "asl nusxa arxivda yo'q");
 
   if (media) {

@@ -10,11 +10,14 @@ export function metaLine(...parts: (string | number | null | undefined | false)[
 
 /**
  * One event emoji, the event in bold, and the subject it happened to:
- * `🗑 <b>O'chirildi</b> — Ali Valiev`. The subject is escaped.
+ * `🗑 <b>O'chirildi</b> — Ali Valiev`.
+ *
+ * `subjectHtml` must already be HTML-safe — pass `escapeHtml(name)` or the
+ * result of `userLink`.
  */
-export function eventHeader(emoji: string, event: string, subject?: string | null): string {
+export function eventHeader(emoji: string, event: string, subjectHtml?: string | null): string {
   const head = `${emoji} <b>${event}</b>`;
-  return subject ? `${head} — ${escapeHtml(subject)}` : head;
+  return subjectHtml ? `${head} — ${subjectHtml}` : head;
 }
 
 /**
@@ -36,4 +39,31 @@ export function withNote(blocks: string[], note: string): string[] {
 /** Chat display name, falling back to the id when the chat has no title. */
 export function chatLabel(chat: { id: number; title?: string; first_name?: string }): string {
   return chat.title || chat.first_name || `Chat ${chat.id}`;
+}
+
+export interface LinkableUser {
+  id: number;
+  username?: string;
+}
+
+const USERNAME_PATTERN = /^[A-Za-z0-9_]{1,32}$/;
+
+/**
+ * Links a person's name to their Telegram profile.
+ *
+ * A `t.me` link always resolves, so it wins when a username exists. The
+ * `tg://user?id=` fallback is only guaranteed to open for users who have
+ * contacted the bot, which chat counterparties generally have not — the id is
+ * therefore still printed as text in the expanded view.
+ */
+export function userLink(user: LinkableUser | undefined, text: string): string {
+  const safeText = escapeHtml(text);
+  if (!user) return safeText;
+
+  const href =
+    user.username && USERNAME_PATTERN.test(user.username)
+      ? `https://t.me/${user.username}`
+      : `tg://user?id=${user.id}`;
+
+  return `<a href="${href}">${safeText}</a>`;
 }

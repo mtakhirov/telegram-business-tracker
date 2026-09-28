@@ -3,7 +3,7 @@ import { OWNER_ID } from "../../core/config.js";
 import { listChatMessages, searchMessages, type StoredMessage } from "../../store/message-store.js";
 import { escapeHtml, formatWhenSeconds, getMediaInfo, getUserDisplayName } from "../../utils/format.js";
 import { metaLine, withMeta } from "../../utils/notify-format.js";
-import { quote, sendBlocks } from "../../utils/telegram-limits.js";
+import { contentBlocks, sendBlocks } from "../../utils/telegram-limits.js";
 
 const composer = new Composer();
 
@@ -30,7 +30,7 @@ function resultBlocks(message: StoredMessage, options: { showChat: boolean }): s
     media?.word,
   );
 
-  return withMeta(meta, quote(snippet));
+  return withMeta(meta, contentBlocks(snippet));
 }
 
 composer.command("search", async (ctx) => {

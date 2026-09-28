@@ -56,6 +56,29 @@ export function formatWhenSeconds(timestamp: number, now?: Date): string {
   return formatWhen(new Date(timestamp * 1000), now);
 }
 
+const exactFormatter = new Intl.DateTimeFormat("en-GB", {
+  timeZone: TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
+/** Unambiguous timestamp for the expanded view: "28.09.2026 14:32:11". */
+export function formatExact(date: Date): string {
+  const p = zoneParts(date);
+  const seconds = exactFormatter.formatToParts(date).find((part) => part.type === "second")!.value;
+  return `${p.day}.${p.month}.${p.year} ${p.hour}:${p.minute}:${seconds}`;
+}
+
+/** `formatExact` for a Telegram timestamp, which is in seconds. */
+export function formatExactSeconds(timestamp: number): string {
+  return formatExact(new Date(timestamp * 1000));
+}
+
 export function escapeHtml(text: string): string {
   if (!text) return "";
   return text

@@ -3,7 +3,7 @@ import { OWNER_ID } from "../../core/config.js";
 import { getOwnerConnectionId, getVersions } from "../../store/message-store.js";
 import { formatWhen, formatWhenSeconds } from "../../utils/format.js";
 import { metaLine, withMeta } from "../../utils/notify-format.js";
-import { quote, sendBlocks } from "../../utils/telegram-limits.js";
+import { contentBlocks, sendBlocks } from "../../utils/telegram-limits.js";
 
 const composer = new Composer();
 
@@ -38,7 +38,7 @@ composer.command("versions", async (ctx) => {
   for (const version of versions) {
     const when = version.editDate ? formatWhenSeconds(version.editDate) : formatWhen(version.storedAt);
     const content = version.text || version.caption || "";
-    blocks.push(...withMeta(metaLine(`v${version.version}`, when), quote(content)));
+    blocks.push(...withMeta(metaLine(`v${version.version}`, when), contentBlocks(content)));
   }
 
   await sendBlocks(ctx.api, ctx.chat.id, blocks);

@@ -85,7 +85,7 @@ describe("deleted notifications", () => {
     expect(body(calls[0]!)).toBe(
       `🗑 <b>O'chirildi</b> — Ali Valiev\n` +
         `Chat 555 · msg 1042 · ${formatWhenSeconds(date)}\n\n` +
-        `<blockquote>salom, qalaysan</blockquote>`,
+        `salom, qalaysan`,
     );
   });
 
@@ -109,8 +109,8 @@ describe("deleted notifications", () => {
     expect(body(calls[0]!)).toBe(
       `🗑 <b>3 xabar o'chirildi</b> — Ali Valiev\n` +
         `Chat 555\n\n` +
-        `msg 2001 · ${formatWhenSeconds(date)}\n<blockquote>ulardan</blockquote>\n\n` +
-        `msg 2002 · Men · ${formatWhenSeconds(date)}\n<blockquote>mendan</blockquote>\n\n` +
+        `msg 2001 · ${formatWhenSeconds(date)}\nulardan\n\n` +
+        `msg 2002 · Men · ${formatWhenSeconds(date)}\nmendan\n\n` +
         `msg 2999 · arxivda yo'q`,
     );
   });
@@ -126,7 +126,7 @@ describe("deleted notifications", () => {
     expect(body(calls[0]!)).toBe(
       `🗑 <b>O'chirildi</b> — Sotuv bo'limi\n` +
         `Chat -1001234 · msg 3001 · Ali Valiev · ${formatWhenSeconds(date)}\n\n` +
-        `<blockquote>narxni keyin aytaman</blockquote>`,
+        `narxni keyin aytaman`,
     );
   });
 
@@ -149,7 +149,7 @@ describe("deleted notifications", () => {
     expect(body(calls[0]!)).toBe(
       `🗑 <b>O'chirildi</b> — Ali Valiev\n` +
         `Chat 555 · msg 4001 · ${formatWhenSeconds(date)} · rasm\n\n` +
-        `<blockquote>rasm izohi</blockquote>`,
+        `rasm izohi`,
     );
   });
 
@@ -199,7 +199,7 @@ describe("edited notifications", () => {
     expect(body(calls[0]!)).toBe(
       `✏️ <b>Tahrirlandi</b> — Ali Valiev\n` +
         `Chat 555 · msg 5001 · ${formatWhenSeconds(editDate)}\n\n` +
-        `<blockquote><s>salom qalaysan</s>\nsalom, qalaysan?</blockquote>`,
+        `<s>salom qalaysan</s>\nsalom, qalaysan?`,
     );
   });
 
@@ -220,7 +220,7 @@ describe("edited notifications", () => {
     expect(body(calls[0]!)).toBe(
       `✏️ <b>Tahrirlandi</b> — Ali Valiev\n` +
         `Chat 555 · msg 5999 · ${formatWhenSeconds(date)}\n\n` +
-        `<blockquote>yangi matn</blockquote>\nasl nusxa arxivda yo'q`,
+        `yangi matn\nasl nusxa arxivda yo'q`,
     );
   });
 

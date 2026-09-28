@@ -4,7 +4,7 @@ import { getMessage, deleteMessage, isOwnerConnection, isChatTracked } from "../
 import { getUserDisplayName, formatWhenSeconds, getMediaInfo } from "../utils/format.js";
 import { chatLabel, eventHeader, metaLine, withMeta } from "../utils/notify-format.js";
 import { sendMediaWithBlocks } from "../utils/send-media.js";
-import { quote, sendBlocks } from "../utils/telegram-limits.js";
+import { contentBlocks, sendBlocks } from "../utils/telegram-limits.js";
 
 const composer = new Composer();
 
@@ -68,14 +68,14 @@ composer.on("deleted_business_messages", async (ctx) => {
     if (single) {
       const entry = entries[0]!;
       const meta = metaLine(`Chat ${chat.id}`, `msg ${entry.msgId}`, entry.sender, entry.when ?? "arxivda yo'q");
-      blocks.push(`${eventHeader("🗑", "O'chirildi", label)}\n${meta}`, ...quote(entry.content));
+      blocks.push(`${eventHeader("🗑", "O'chirildi", label)}\n${meta}`, ...contentBlocks(entry.content));
     } else {
       blocks.push(
         `${eventHeader("🗑", `${messageIds.length} xabar o'chirildi`, label)}\n${metaLine(`Chat ${chat.id}`)}`,
       );
       for (const entry of entries) {
         const meta = metaLine(`msg ${entry.msgId}`, entry.sender, entry.when ?? "arxivda yo'q");
-        blocks.push(...withMeta(meta, quote(entry.content)));
+        blocks.push(...withMeta(meta, contentBlocks(entry.content)));
       }
     }
 
@@ -92,7 +92,7 @@ composer.on("deleted_business_messages", async (ctx) => {
       metaLine(`Chat ${chat.id}`, `msg ${msgId}`, senderOf(stored.from), formatWhenSeconds(stored.date), media.word);
 
     const content = stored.caption || stored.text || "";
-    await sendMediaWithBlocks(ctx.api, ADMIN_CHAT_ID, media, mediaHeader, quote(content));
+    await sendMediaWithBlocks(ctx.api, ADMIN_CHAT_ID, media, mediaHeader, contentBlocks(content));
     deleteMessage(businessConnectionId, chat.id, msgId);
   }
 });
