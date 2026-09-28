@@ -8,8 +8,8 @@ export function getUserDisplayName(user?: User): string {
   return user.username ? `${name} (@${user.username})` : name;
 }
 
-export function formatDate(timestamp: number): string {
-  return new Date(timestamp * 1000).toLocaleString("uz-UZ", {
+export function formatDateTime(date: Date): string {
+  return date.toLocaleString("uz-UZ", {
     timeZone: "Asia/Tashkent",
     year: "numeric",
     month: "2-digit",
@@ -18,6 +18,11 @@ export function formatDate(timestamp: number): string {
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+/** Formats a Telegram timestamp, which is in seconds. */
+export function formatDate(timestamp: number): string {
+  return formatDateTime(new Date(timestamp * 1000));
 }
 
 export function escapeHtml(text: string): string {

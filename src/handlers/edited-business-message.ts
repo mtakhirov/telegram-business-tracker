@@ -1,6 +1,6 @@
 import { Composer } from "grammy";
 import { ADMIN_CHAT_ID } from "../core/config.js";
-import { getMessage, storeMessage, isOwnerConnection } from "../store/message-store.js";
+import { getMessage, storeMessage, isOwnerConnection, isChatTracked } from "../store/message-store.js";
 import { getUserDisplayName, formatDate, getContentDescription, getMediaInfo, getMediaLabel, escapeHtml } from "../utils/format.js";
 import { sendMediaWithBlocks } from "../utils/send-media.js";
 import { quote, sendBlocks } from "../utils/telegram-limits.js";
@@ -14,6 +14,7 @@ composer.on("edited_business_message", async (ctx) => {
   const messageId = editedMsg.message_id;
 
   if (!isOwnerConnection(businessConnectionId)) return;
+  if (!isChatTracked(chatId)) return;
 
   const original = getMessage(businessConnectionId, chatId, messageId);
 

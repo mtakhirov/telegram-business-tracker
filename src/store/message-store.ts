@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import path from "node:path";
 import fs from "node:fs";
 import type { User } from "grammy/types";
-import { OWNER_ID } from "../core/config.js";
+import { DEFAULT_TRACK_MODE, OWNER_ID } from "../core/config.js";
 
 export interface StoredMessage {
   messageId: number;
@@ -96,6 +96,25 @@ db.exec(`
   )
 `);
 
+// Metadata only (id, title, last seen) for every chat the bot observes, so
+// /chats can offer them for tracking. No message content is kept here.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS chats (
+    chat_id   INTEGER PRIMARY KEY,
+    title     TEXT,
+    last_seen INTEGER NOT NULL
+  )
+`);
+
+// Per-chat archiving decision. A chat with no row falls back to DEFAULT_TRACK_MODE.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS chat_rules (
+    chat_id    INTEGER PRIMARY KEY,
+    mode       TEXT NOT NULL CHECK (mode IN ('allow', 'deny')),
+    updated_at INTEGER NOT NULL
+  )
+`);
+
 const stmtGet = db.prepare("SELECT * FROM messages WHERE key = ?");
 const stmtInsert = db.prepare(`
   INSERT OR REPLACE INTO messages (key, message_id, chat_id, business_connection_id, from_json, date, text, caption, photo, video, document, sticker, voice, audio, animation, stored_at)
@@ -111,6 +130,23 @@ const stmtUpsertConnection = db.prepare(`
   INSERT OR REPLACE INTO business_connections (id, user_id, is_enabled, updated_at)
   VALUES (?, ?, ?, ?)
 `);
+
+const stmtTouchChat = db.prepare(`
+  INSERT INTO chats (chat_id, title, last_seen) VALUES (?, ?, ?)
+  ON CONFLICT (chat_id) DO UPDATE SET title = excluded.title, last_seen = excluded.last_seen
+`);
+const stmtListChats = db.prepare(`
+  SELECT c.chat_id, c.title, c.last_seen, r.mode
+  FROM chats c LEFT JOIN chat_rules r ON r.chat_id = c.chat_id
+  ORDER BY c.last_seen DESC
+`);
+const stmtGetChatRule = db.prepare("SELECT mode FROM chat_rules WHERE chat_id = ?");
+const stmtSetChatRule = db.prepare(`
+  INSERT INTO chat_rules (chat_id, mode, updated_at) VALUES (?, ?, ?)
+  ON CONFLICT (chat_id) DO UPDATE SET mode = excluded.mode, updated_at = excluded.updated_at
+`);
+const stmtDeleteChatRule = db.prepare("DELETE FROM chat_rules WHERE chat_id = ?");
+const stmtDeleteMessagesByChat = db.prepare("DELETE FROM messages WHERE chat_id = ?");
 
 function getKey(businessConnectionId: string, chatId: number, messageId: number): string {
   return `${businessConnectionId}:${chatId}:${messageId}`;
@@ -201,6 +237,49 @@ export function saveConnection(conn: StoredConnection): void {
 export function isOwnerConnection(id: string): boolean {
   const conn = getConnection(id);
   return !!conn && conn.userId === OWNER_ID && conn.isEnabled;
+}
+
+export type TrackMode = "allow" | "deny";
+
+export interface KnownChat {
+  chatId: number;
+  title: string | null;
+  lastSeen: Date;
+  mode: TrackMode | null;
+}
+
+/** Record that a chat exists, with its current title. Metadata only. */
+export function touchChat(chatId: number, title: string | null): void {
+  stmtTouchChat.run(chatId, title, Date.now());
+}
+
+/** Whether this chat should be archived, falling back to DEFAULT_TRACK_MODE. */
+export function isChatTracked(chatId: number): boolean {
+  const row = stmtGetChatRule.get(chatId) as { mode: TrackMode } | undefined;
+  return (row?.mode ?? DEFAULT_TRACK_MODE) === "allow";
+}
+
+export function listChats(): KnownChat[] {
+  const rows = stmtListChats.all() as Record<string, unknown>[];
+  return rows.map((row) => ({
+    chatId: row.chat_id as number,
+    title: (row.title as string) || null,
+    lastSeen: new Date(row.last_seen as number),
+    mode: (row.mode as TrackMode) ?? null,
+  }));
+}
+
+export function setChatRule(chatId: number, mode: TrackMode): void {
+  stmtSetChatRule.run(chatId, mode, Date.now());
+}
+
+export function clearChatRule(chatId: number): void {
+  stmtDeleteChatRule.run(chatId);
+}
+
+/** Drop every stored message for one chat. Returns the number of deleted rows. */
+export function deleteMessagesByChat(chatId: number): number {
+  return stmtDeleteMessagesByChat.run(chatId).changes;
 }
 
 export function closeStore(): void {

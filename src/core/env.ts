@@ -23,6 +23,12 @@ export default defineEnv({
     BOT_NAME: z.string().min(1).default("Business Chat Archive"),
     /** Days to keep stored messages before automatic cleanup. */
     RETENTION_DAYS: z.coerce.number().int().min(1).default(30),
+    /**
+     * Whether a chat with no explicit rule is archived.
+     * "deny" is the privacy-preserving default: archive only chats you add
+     * with /track.
+     */
+    DEFAULT_TRACK_MODE: z.enum(["allow", "deny"]).default("allow"),
   },
   env: process.env,
   onError: (issues) => {
