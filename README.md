@@ -59,6 +59,12 @@ Fill in `.env`:
 | `DB_PATH`            | no       | `data/messages.db`    | SQLite file location                                                |
 | `RETENTION_DAYS`     | no       | `30`                  | Days before a stored message is deleted                             |
 | `DEFAULT_TRACK_MODE` | no       | `allow`               | Whether a chat with no rule is archived (`allow` or `deny`)          |
+| `HEALTH_PORT`        | no       | `3000`                | Health endpoint port on 127.0.0.1; `0` disables it                  |
+| `BACKUP_DIR`         | no       | `data/backups`        | Where database snapshots are written                                |
+| `BACKUP_INTERVAL_HOURS` | no    | `24`                  | Hours between snapshots; `0` disables them                          |
+| `BACKUP_KEEP`        | no       | `7`                   | How many snapshots to keep                                          |
+| `LOG_LEVEL`          | no       | `info`                | pino log level                                                       |
+| `LOG_PRETTY`         | no       | —                     | Set to `1` for human-readable logs while developing                 |
 
 \* `OWNER_ID` is required when `ADMIN_CHAT_ID` is a group or channel, because
 the fallback only works when it is your own user ID.
@@ -119,6 +125,10 @@ All commands are owner-only and silently ignore everyone else.
 | `/history <chat_id> [limit]`        | Recent stored messages in a chat            |
 | `/versions <chat_id> <message_id>`  | Full edit chain for one message             |
 | `/export [chat_id]`                 | Download the archive as JSON                |
+| `/settings`                         | Show retention and the archiving default    |
+| `/settings retention <days>`        | Change how long messages are kept           |
+| `/settings track <allow\|deny>`     | Change the default for chats with no rule   |
+| `/settings reset <retention\|track>`| Fall back to the value from `.env`          |
 
 ## What it does
 
@@ -153,16 +163,42 @@ In `DB_PATH`:
   `/chats` can offer them; no message content
 - `chat_rules` — your per-chat archiving decisions
 - `business_connections` — connection id, owner id, enabled flag
+- `settings` — runtime overrides for the values `/settings` can change
 - `notification_details` — the collapsed and expanded text of a sent
   notification, so the expand button still works later
 
 Media is referenced by `file_id` and never downloaded. The database file is
 created with mode `600` and its directory with `700`.
 
-Rows older than `RETENTION_DAYS` are deleted on startup and hourly thereafter.
+Rows older than the retention window are deleted on startup and hourly
+thereafter. `/settings retention` changes that window without a restart.
 `notification_details` keeps its own **7-day** limit, because it holds a copy of
 content that `messages` has already purged; it is also dropped by
 `/forget <chat_id>`.
+
+## Operations
+
+A snapshot of the database is written to `BACKUP_DIR` every `BACKUP_INTERVAL_HOURS`
+and the oldest are pruned beyond `BACKUP_KEEP`. Snapshots use SQLite's
+`VACUUM INTO`, so they are consistent and compact and need no downtime. Take a
+manual one with `bun run db:backup`. A snapshot beside the database survives
+corruption and mistakes, not the loss of the disk — copy `BACKUP_DIR` off the
+machine for that.
+
+`GET /health` on `127.0.0.1:HEALTH_PORT` reports uptime and the archive size.
+It is bound to loopback only, which is all the Docker `HEALTHCHECK` needs
+because it runs inside the container.
+
+Logs are structured JSON from pino. `docker-compose.yml` caps them at 3 files of
+10 MB.
+
+Schema changes are drizzle-kit migrations in `drizzle/`, applied automatically
+on startup:
+
+```bash
+bun run db:generate   # after editing src/shared/db/schema.ts
+bun run db:migrate    # apply manually; startup does this too
+```
 
 ## Development
 
@@ -175,13 +211,27 @@ bun run test        # unit tests (isolated per file; plain `bun test` shares one
 message with `commitlint` (Conventional Commits). Hooks install via
 `bun install`; to set them up manually run `bunx lefthook install`.
 
+## Layout
+
+Source follows a feature-sliced layout, with imports only ever pointing down:
+
+```
+src/app/        composition: bot, handlers, commands, entry point
+src/features/   one slice per user-facing behaviour
+src/entities/   message, chat, connection, notification, settings
+src/shared/     config, db, telegram helpers, formatting, logger
+```
+
 ## Stack
 
 - [grammY](https://grammy.dev) — Telegram bot framework, with `auto-retry` and
   `transformer-throttler` for rate limits
 - [Bun](https://bun.sh) runtime and `bun:sqlite`
+- [Drizzle ORM](https://orm.drizzle.team) with drizzle-kit migrations
 - [envin](https://envin.turbostarter.dev) + [zod](https://zod.dev) for
   environment validation
+- [pino](https://getpino.io) for logging, [oxlint and oxfmt](https://oxc.rs) for
+  linting and formatting
 
 ## License
 
