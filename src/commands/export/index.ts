@@ -14,7 +14,7 @@ composer.command("export", async (ctx) => {
 
   const arg = ctx.match.trim();
   if (arg && !/^-?\d+$/.test(arg)) {
-    await ctx.reply("Ishlatilishi: <code>/export [chat_id]</code>", { parse_mode: "HTML" });
+    await ctx.reply("Ishlatilishi: /export [chat_id]");
     return;
   }
 
@@ -63,10 +63,9 @@ composer.command("export", async (ctx) => {
   const json = Buffer.from(JSON.stringify(payload, null, 2), "utf8");
   if (json.byteLength > MAX_EXPORT_BYTES) {
     const mb = (json.byteLength / 1024 / 1024).toFixed(1);
-    await ctx.reply(
-      `Eksport juda katta (${mb} MB). Bitta chatni eksport qiling: <code>/export &lt;chat_id&gt;</code>`,
-      { parse_mode: "HTML" },
-    );
+    await ctx.reply(`Eksport juda katta (${mb} MB) — bitta chatni eksport qiling: /export &lt;chat_id&gt;`, {
+      parse_mode: "HTML",
+    });
     return;
   }
 
@@ -74,7 +73,7 @@ composer.command("export", async (ctx) => {
   const name = chatId === undefined ? `export-${stamp}.json` : `export-${chatId}-${stamp}.json`;
 
   await ctx.replyWithDocument(new InputFile(json, name), {
-    caption: `📦 ${messages.length} ta xabar eksport qilindi.`,
+    caption: `${messages.length} xabar eksport qilindi`,
   });
 });
 

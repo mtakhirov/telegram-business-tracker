@@ -1,5 +1,4 @@
 import { Composer } from "grammy";
-import { getStoreSize } from "../../store/message-store.js";
 import { BOT_NAME, OWNER_ID } from "../../core/config.js";
 import { escapeHtml } from "../../utils/format.js";
 
@@ -9,34 +8,26 @@ composer.command("start", async (ctx) => {
   // Private tool: ignore everyone except the owner, and reveal nothing.
   if (ctx.from?.id !== OWNER_ID) return;
 
+  const name = escapeHtml(BOT_NAME);
   const payload = ctx.match;
 
+  // Deep link from a business chat's management button.
   if (payload && payload.startsWith("bizChat")) {
     const chatId = escapeHtml(payload.slice(7));
     await ctx.reply(
-      `🤖 <b>${escapeHtml(BOT_NAME)}</b>\n\n` +
-        `Chat <code>#${chatId}</code> boshqarilmoqda.\n\n` +
-        `Bu bot business chatdagi barcha xabarlarni kuzatib boradi:\n` +
-        `• ✏️ Tahrirlangan xabarlar\n` +
-        `• 🗑 O'chirilgan xabarlar\n\n` +
-        `Barcha bildirishnomalar admin chatga yuboriladi.`,
+      `<b>${name}</b>\nChat ${chatId}\n\n` +
+        `/track ${chatId} — arxivlash\n` +
+        `/history ${chatId} — xabarlar`,
       { parse_mode: "HTML" },
     );
     return;
   }
 
   await ctx.reply(
-    `🤖 <b>${escapeHtml(BOT_NAME)}</b>\n\n` +
-      `Bu bot Telegram Business orqali ulangan chatlardagi:\n` +
-      `• ✏️ <b>Tahrirlangan</b> xabarlarni\n` +
-      `• 🗑 <b>O'chirilgan</b> xabarlarni\n` +
-      `kuzatib boradi va sizga xabar beradi.\n\n` +
-      `<b>Qanday sozlash kerak:</b>\n` +
-      `1. Telegram Premium obunangiz bo'lishi kerak\n` +
-      `2. Telegram Settings → Telegram Business → Chatbots\n` +
-      `3. Shu botni tanlang va ulab qo'ying\n` +
-      `4. Bot avtomatik ravishda barcha business chatlardagi o'zgarishlarni kuzatadi\n\n` +
-      `📊 Hozirda xotirada: <b>${getStoreSize()}</b> ta xabar`,
+    `<b>${name}</b>\n\n` +
+      `Telegram Business chatlaringizdagi tahrirlangan va o'chirilgan xabarlarni arxivlaydi.\n\n` +
+      `Ulash: Settings → Telegram Business → Chatbots\n` +
+      `/help — buyruqlar`,
     { parse_mode: "HTML" },
   );
 });

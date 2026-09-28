@@ -1,7 +1,8 @@
 import { Composer } from "grammy";
 import { OWNER_ID } from "../../core/config.js";
 import { listChatMessages, searchMessages, type StoredMessage } from "../../store/message-store.js";
-import { formatDate, getContentDescription, getUserDisplayName, escapeHtml } from "../../utils/format.js";
+import { escapeHtml, formatWhenSeconds, getMediaInfo, getUserDisplayName } from "../../utils/format.js";
+import { metaLine, withMeta } from "../../utils/notify-format.js";
 import { quote, sendBlocks } from "../../utils/telegram-limits.js";
 
 const composer = new Composer();
@@ -10,17 +11,26 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 const SNIPPET_LENGTH = 300;
 
-/** One result block: where it came from, when, and a trimmed excerpt. */
-function resultBlock(message: StoredMessage): string[] {
-  const user = getUserDisplayName(message.from);
-  const raw = message.text || message.caption || getContentDescription(message);
+/** Meta line plus a trimmed excerpt, rendered on consecutive lines. */
+function resultBlocks(message: StoredMessage, options: { showChat: boolean }): string[] {
+  const media = getMediaInfo(message);
+  const raw = message.text || message.caption || "";
   const snippet = raw.length > SNIPPET_LENGTH ? `${raw.slice(0, SNIPPET_LENGTH)}…` : raw;
 
-  return [
-    `💬 <code>${message.chatId}</code> · 🆔 <code>${message.messageId}</code>\n` +
-      `👤 ${escapeHtml(user)} · 📅 ${formatDate(message.date)}`,
-    ...quote(snippet),
-  ];
+  // In a private chat the chat id equals the counterparty's user id, so a
+  // different sender id means the message was the owner's own.
+  const sender =
+    message.from && message.from.id !== message.chatId ? getUserDisplayName(message.from) : null;
+
+  const meta = metaLine(
+    options.showChat ? `Chat ${message.chatId}` : null,
+    `msg ${message.messageId}`,
+    sender,
+    formatWhenSeconds(message.date),
+    media?.word,
+  );
+
+  return withMeta(meta, quote(snippet));
 }
 
 composer.command("search", async (ctx) => {
@@ -28,21 +38,18 @@ composer.command("search", async (ctx) => {
 
   const query = ctx.match.trim();
   if (query.length < 2) {
-    await ctx.reply(
-      "Ishlatilishi: <code>/search &lt;so'z&gt;</code>\n\nKamida 2 belgi kiriting.",
-      { parse_mode: "HTML" },
-    );
+    await ctx.reply("Ishlatilishi: /search &lt;so'z&gt; — kamida 2 belgi", { parse_mode: "HTML" });
     return;
   }
 
   const results = searchMessages(query, DEFAULT_LIMIT);
   if (results.length === 0) {
-    await ctx.reply(`🔍 <b>${escapeHtml(query)}</b> bo'yicha natija yo'q.`, { parse_mode: "HTML" });
+    await ctx.reply(`Qidiruv: ${escapeHtml(query)} — natija yo'q`, { parse_mode: "HTML" });
     return;
   }
 
-  const blocks = [`🔍 <b>${escapeHtml(query)}</b> — ${results.length} natija`];
-  for (const message of results) blocks.push(...resultBlock(message));
+  const blocks = [`<b>Qidiruv:</b> ${escapeHtml(query)} — ${results.length} natija`];
+  for (const message of results) blocks.push(...resultBlocks(message, { showChat: true }));
 
   await sendBlocks(ctx.api, ctx.chat.id, blocks);
 });
@@ -52,11 +59,7 @@ composer.command("history", async (ctx) => {
 
   const parts = ctx.match.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0 || !/^-?\d+$/.test(parts[0]!)) {
-    await ctx.reply(
-      "Ishlatilishi: <code>/history &lt;chat_id&gt; [limit]</code>\n\n" +
-        "Chat ID'ni <code>/chats</code> dan oling.",
-      { parse_mode: "HTML" },
-    );
+    await ctx.reply("Ishlatilishi: /history &lt;chat_id&gt; [limit]", { parse_mode: "HTML" });
     return;
   }
 
@@ -66,12 +69,12 @@ composer.command("history", async (ctx) => {
 
   const messages = listChatMessages(chatId, limit);
   if (messages.length === 0) {
-    await ctx.reply(`<code>${chatId}</code> uchun saqlangan xabar yo'q.`, { parse_mode: "HTML" });
+    await ctx.reply(`Chat ${chatId} — saqlangan xabar yo'q`);
     return;
   }
 
-  const blocks = [`📜 <b>Chat <code>${chatId}</code></b> — oxirgi ${messages.length} xabar`];
-  for (const message of messages) blocks.push(...resultBlock(message));
+  const blocks = [`<b>Chat ${chatId}</b> — oxirgi ${messages.length} xabar`];
+  for (const message of messages) blocks.push(...resultBlocks(message, { showChat: false }));
 
   await sendBlocks(ctx.api, ctx.chat.id, blocks);
 });
