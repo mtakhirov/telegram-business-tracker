@@ -153,7 +153,7 @@ Rows older than `RETENTION_DAYS` are deleted on startup and hourly thereafter.
 
 ```bash
 bun run typecheck   # tsc --noEmit
-bun test            # unit tests
+bun run test        # unit tests (isolated per file; plain `bun test` shares one DB)
 ```
 
 `lefthook` runs the typecheck and tests before each commit and lints the commit
