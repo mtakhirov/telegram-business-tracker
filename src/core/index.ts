@@ -1,7 +1,7 @@
 import { bot } from "./bot.js";
 import commands from "../commands/index.js";
 import handlers from "../handlers/index.js";
-import { cleanupOldMessages } from "../store/message-store.js";
+import { cleanupOldMessages, closeStore } from "../store/message-store.js";
 import { RETENTION_DAYS } from "./config.js";
 
 // Register commands and handlers via Composer
@@ -29,7 +29,23 @@ function runCleanup(): void {
 }
 
 runCleanup();
-setInterval(runCleanup, CLEANUP_INTERVAL_MS);
+const cleanupTimer = setInterval(runCleanup, CLEANUP_INTERVAL_MS);
+
+// Graceful shutdown: stop polling and close the database so updates are not
+// reprocessed on restart and no writes are lost mid-flush.
+let shuttingDown = false;
+async function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`\n${signal} qabul qilindi, to'xtatilmoqda...`);
+  clearInterval(cleanupTimer);
+  await bot.stop();
+  closeStore();
+  process.exit(0);
+}
+
+process.once("SIGINT", () => void shutdown("SIGINT"));
+process.once("SIGTERM", () => void shutdown("SIGTERM"));
 
 // Start bot
 console.log("🚀 Bot ishga tushmoqda...");
