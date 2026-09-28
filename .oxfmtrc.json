@@ -8,5 +8,5 @@
   "arrowParens": "always",
   "endOfLine": "lf",
   "insertFinalNewline": true,
-  "ignorePatterns": ["dist", "node_modules", "data"]
+  "ignorePatterns": ["dist", "node_modules", "data", "**/*.md", "**/*.yml", "**/*.yaml"]
 }

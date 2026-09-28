@@ -22,6 +22,10 @@ const zoneFormatter = new Intl.DateTimeFormat("en-GB", {
   hourCycle: "h23",
 });
 
+function sameDay(a: Record<string, string>, b: Record<string, string>): boolean {
+  return a.year === b.year && a.month === b.month && a.day === b.day;
+}
+
 function zoneParts(date: Date): Record<string, string> {
   const parts: Record<string, string> = {};
   for (const part of zoneFormatter.formatToParts(date)) {
@@ -41,9 +45,6 @@ export function formatWhen(date: Date, now: Date = new Date()): string {
   const target = zoneParts(date);
   const today = zoneParts(now);
   const time = `${target.hour}:${target.minute}`;
-
-  const sameDay = (a: Record<string, string>, b: Record<string, string>) =>
-    a.year === b.year && a.month === b.month && a.day === b.day;
 
   if (sameDay(target, today)) return time;
   if (sameDay(target, zoneParts(new Date(now.getTime() - DAY_MS)))) return `kecha ${time}`;
@@ -81,10 +82,7 @@ export function formatExactSeconds(timestamp: number): string {
 
 export function escapeHtml(text: string): string {
   if (!text) return "";
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 interface ContentMessage {
@@ -129,17 +127,28 @@ export function getMediaInfo(msg: ContentMessage): MediaInfo | null {
     return { type: "video", fileId: (msg.video as { file_id: string }).file_id, word: "video" };
   }
   if (msg.document && (msg.document as { file_id?: string }).file_id) {
-    return { type: "document", fileId: (msg.document as { file_id: string }).file_id, word: mediaWord("fayl", msg.document.file_name) };
+    return {
+      type: "document",
+      fileId: (msg.document as { file_id: string }).file_id,
+      word: mediaWord("fayl", msg.document.file_name),
+    };
   }
   if (msg.voice && (msg.voice as { file_id?: string }).file_id) {
     return { type: "voice", fileId: (msg.voice as { file_id: string }).file_id, word: "ovozli xabar" };
   }
   if (msg.audio && (msg.audio as { file_id?: string }).file_id) {
-    return { type: "audio", fileId: (msg.audio as { file_id: string }).file_id, word: mediaWord("audio", msg.audio.title) };
+    return {
+      type: "audio",
+      fileId: (msg.audio as { file_id: string }).file_id,
+      word: mediaWord("audio", msg.audio.title),
+    };
   }
   if (msg.sticker && (msg.sticker as { file_id?: string }).file_id) {
-    return { type: "sticker", fileId: (msg.sticker as { file_id: string }).file_id, word: mediaWord("sticker", msg.sticker.emoji) };
+    return {
+      type: "sticker",
+      fileId: (msg.sticker as { file_id: string }).file_id,
+      word: mediaWord("sticker", msg.sticker.emoji),
+    };
   }
   return null;
 }
-

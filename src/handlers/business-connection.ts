@@ -32,11 +32,9 @@ composer.on("business_connection", async (ctx) => {
 
   // On disconnect, drop everything stored for that connection.
   const removed = deleteMessagesByConnection(conn.id);
-  await ctx.api.sendMessage(
-    ADMIN_CHAT_ID,
-    `${eventHeader("🔗", "Uzildi")} — ${removed} yozuv o'chirildi`,
-    { parse_mode: "HTML" },
-  );
+  await ctx.api.sendMessage(ADMIN_CHAT_ID, `${eventHeader("🔗", "Uzildi")} — ${removed} yozuv o'chirildi`, {
+    parse_mode: "HTML",
+  });
 });
 
 export default composer;

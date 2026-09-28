@@ -6,6 +6,10 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
     "test": "bun test --isolate",
     "start": "bun dist/core/index.js",
     "dev": "bun --watch src/core/index.ts",

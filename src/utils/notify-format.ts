@@ -5,7 +5,9 @@ import { escapeHtml } from "./format.js";
  * `Chat 555 · msg 1042 · 14:32 · rasm`.
  */
 export function metaLine(...parts: (string | number | null | undefined | false)[]): string {
-  return parts.filter((part) => part !== null && part !== undefined && part !== false && part !== "").join(" · ");
+  return parts
+    .filter((part) => part !== null && part !== undefined && part !== false && part !== "")
+    .join(" · ");
 }
 
 /**

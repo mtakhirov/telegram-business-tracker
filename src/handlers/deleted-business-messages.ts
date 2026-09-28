@@ -37,7 +37,11 @@ composer.on("deleted_business_messages", async (ctx) => {
   // Classify without deleting yet. Rows are removed from the store only after
   // the notification for them has been sent, so a send failure never loses data.
   const entries: TextEntry[] = [];
-  const mediaMsgs: { stored: NonNullable<ReturnType<typeof getMessage>>; media: NonNullable<ReturnType<typeof getMediaInfo>>; msgId: number }[] = [];
+  const mediaMsgs: {
+    stored: NonNullable<ReturnType<typeof getMessage>>;
+    media: NonNullable<ReturnType<typeof getMediaInfo>>;
+    msgId: number;
+  }[] = [];
 
   for (const msgId of messageIds) {
     const stored = getMessage(businessConnectionId, chat.id, msgId);

@@ -22,7 +22,10 @@ const GROUP = -1001234;
 let store: typeof import("../store/message-store.js");
 let formatExactSeconds: (typeof import("../utils/format.js"))["formatExactSeconds"];
 let formatWhenSeconds: (typeof import("../utils/format.js"))["formatWhenSeconds"];
-let handlers: Record<string, { middleware: () => (ctx: Context, next: () => Promise<void>) => Promise<void> }>;
+let handlers: Record<
+  string,
+  { middleware: () => (ctx: Context, next: () => Promise<void>) => Promise<void> }
+>;
 
 const me = { id: 1, is_bot: true, first_name: "bot", username: "testbot" } as UserFromGetMe;
 const privateChat = { id: CHAT, first_name: "Ali Valiev", username: "alivaliev", type: "private" as const };
@@ -153,7 +156,12 @@ describe("deleted notifications", () => {
 
   test("leaves a group title unlinked and always names the sender", async () => {
     const date = recently();
-    store.storeMessage(CONN, GROUP, { message_id: 3001, date, from: counterparty, text: "narxni keyin aytaman" });
+    store.storeMessage(CONN, GROUP, {
+      message_id: 3001,
+      date,
+      from: counterparty,
+      text: "narxni keyin aytaman",
+    });
 
     const calls = await run("deleted", {
       deleted_business_messages: { business_connection_id: CONN, chat: groupChat, message_ids: [3001] },
@@ -256,9 +264,7 @@ describe("edited notifications", () => {
       },
     });
 
-    expect(body(calls[0]!)).toBe(
-      `✏️ <b>Tahrirlandi</b> — ${ALI_LINK}\n\nyangi matn\nasl nusxa arxivda yo'q`,
-    );
+    expect(body(calls[0]!)).toBe(`✏️ <b>Tahrirlandi</b> — ${ALI_LINK}\n\nyangi matn\nasl nusxa arxivda yo'q`);
   });
 
   test("stores the new version even though the original was missing", () => {
@@ -299,25 +305,30 @@ describe("notification details", () => {
   });
 });
 
-describe("connection notifications", () => {
-  const connectionUpdate = (isEnabled: boolean, user = owner, id = CONN) => ({
-    business_connection: {
-      id,
-      user,
-      user_chat_id: user.id,
-      date: recently(),
-      is_enabled: isEnabled,
-      rights: {},
-    },
-  });
+const connectionUpdate = (isEnabled: boolean, user = owner, id = CONN) => ({
+  business_connection: {
+    id,
+    user,
+    user_chat_id: user.id,
+    date: recently(),
+    is_enabled: isEnabled,
+    rights: {},
+  },
+});
 
+describe("connection notifications", () => {
   test("announces a connection in one line", async () => {
     const calls = await run("connection", connectionUpdate(true));
     expect(body(calls[0]!)).toBe("🔗 <b>Ulandi</b>");
   });
 
   test("reports how much was purged on disconnect", async () => {
-    store.storeMessage(CONN, CHAT, { message_id: 8001, date: recently(), from: counterparty, text: "qoladi" });
+    store.storeMessage(CONN, CHAT, {
+      message_id: 8001,
+      date: recently(),
+      from: counterparty,
+      text: "qoladi",
+    });
     const calls = await run("connection", connectionUpdate(false));
     expect(body(calls[0]!)).toMatch(/^🔗 <b>Uzildi<\/b> — \d+ yozuv o'chirildi$/);
     expect(store.getMessage(CONN, CHAT, 8001)).toBeUndefined();

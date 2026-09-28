@@ -25,9 +25,7 @@ composer.command("chats", async (ctx) => {
   if (ctx.from?.id !== OWNER_ID) return;
 
   const chats = listChats();
-  const blocks: string[] = [
-    `<b>Chatlar</b> — ${chats.length} ta, default: ${MODE_WORD[DEFAULT_TRACK_MODE]}`,
-  ];
+  const blocks: string[] = [`<b>Chatlar</b> — ${chats.length} ta, default: ${MODE_WORD[DEFAULT_TRACK_MODE]}`];
 
   if (chats.length === 0) {
     blocks.push(`<i>Hali hech qanday chat ko'rilmagan.</i>`);

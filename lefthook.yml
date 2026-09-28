@@ -1,6 +1,12 @@
 pre-commit:
   parallel: true
   commands:
+    format:
+      glob: "*.{ts,json}"
+      run: bunx oxfmt --check {staged_files}
+    lint:
+      glob: "*.ts"
+      run: bunx oxlint {staged_files}
     typecheck:
       glob: "*.ts"
       run: bunx tsc --noEmit

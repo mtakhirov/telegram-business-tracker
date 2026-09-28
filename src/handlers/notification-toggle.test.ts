@@ -28,7 +28,10 @@ interface Call {
 }
 
 /** Fires a button press and returns the API calls the handler made. */
-async function press(data: string, options: { from?: typeof owner; asCaption?: boolean } = {}): Promise<Call[]> {
+async function press(
+  data: string,
+  options: { from?: typeof owner; asCaption?: boolean } = {},
+): Promise<Call[]> {
   const calls: Call[] = [];
   const api = new Api("dummy-token");
   api.config.use((_prev, method, payload) => {

@@ -95,7 +95,12 @@ describe("search", () => {
   test("matches text and captions", () => {
     store.storeMessage(CONN, CHAT, { message_id: 20, date: 1700000030, text: "kitob o'qidim" });
     store.storeMessage(CONN, CHAT, { message_id: 21, date: 1700000031, caption: "kitob rasmi" });
-    expect(store.searchMessages("kitob", 10).map((m) => m.messageId).sort()).toEqual([20, 21]);
+    expect(
+      store
+        .searchMessages("kitob", 10)
+        .map((m) => m.messageId)
+        .toSorted(),
+    ).toEqual([20, 21]);
   });
 
   test("treats LIKE wildcards literally", () => {

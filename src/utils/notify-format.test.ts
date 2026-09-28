@@ -13,7 +13,9 @@ describe("userLink", () => {
   });
 
   test("rejects a malformed username rather than building a bad URL", () => {
-    expect(userLink({ id: 555, username: "bad name/../x" }, "Ali")).toBe(`<a href="tg://user?id=555">Ali</a>`);
+    expect(userLink({ id: 555, username: "bad name/../x" }, "Ali")).toBe(
+      `<a href="tg://user?id=555">Ali</a>`,
+    );
   });
 
   test("escapes the visible name", () => {

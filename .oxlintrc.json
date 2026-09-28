@@ -10,8 +10,12 @@
     "no-console": "off",
     "unicorn/prefer-node-protocol": "error",
     "typescript/no-explicit-any": "error",
-    "no-unused-vars": "error"
+    "no-unused-vars": "error",
+    "import/no-unassigned-import": "off",
+    "no-await-in-loop": "off"
   },
-  "env": { "builtin": true },
+  "env": {
+    "builtin": true
+  },
   "ignorePatterns": ["dist", "node_modules", "data"]
 }

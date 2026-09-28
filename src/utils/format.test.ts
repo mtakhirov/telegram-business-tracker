@@ -21,11 +21,15 @@ describe("getUserDisplayName", () => {
   });
 
   test("joins first and last name", () => {
-    expect(getUserDisplayName({ id: 1, is_bot: false, first_name: "Ali", last_name: "Valiev" })).toBe("Ali Valiev");
+    expect(getUserDisplayName({ id: 1, is_bot: false, first_name: "Ali", last_name: "Valiev" })).toBe(
+      "Ali Valiev",
+    );
   });
 
   test("appends the username when present", () => {
-    expect(getUserDisplayName({ id: 1, is_bot: false, first_name: "Ali", username: "ali" })).toBe("Ali (@ali)");
+    expect(getUserDisplayName({ id: 1, is_bot: false, first_name: "Ali", username: "ali" })).toBe(
+      "Ali (@ali)",
+    );
   });
 });
 

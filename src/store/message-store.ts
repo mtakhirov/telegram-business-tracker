@@ -216,7 +216,9 @@ const stmtListVersions = db.prepare(
 );
 const stmtDeleteVersionsByKey = db.prepare("DELETE FROM message_versions WHERE key = ?");
 const stmtDeleteVersionsByChat = db.prepare("DELETE FROM message_versions WHERE chat_id = ?");
-const stmtDeleteVersionsByConnection = db.prepare("DELETE FROM message_versions WHERE business_connection_id = ?");
+const stmtDeleteVersionsByConnection = db.prepare(
+  "DELETE FROM message_versions WHERE business_connection_id = ?",
+);
 const stmtCleanupVersions = db.prepare("DELETE FROM message_versions WHERE stored_at < ?");
 
 const stmtInsertDetails = db.prepare(`
@@ -255,8 +257,14 @@ function rowToStoredMessage(row: Record<string, unknown>): StoredMessage {
   };
 }
 
-export function getMessage(businessConnectionId: string, chatId: number, messageId: number): StoredMessage | undefined {
-  const row = stmtGet.get(getKey(businessConnectionId, chatId, messageId)) as Record<string, unknown> | undefined;
+export function getMessage(
+  businessConnectionId: string,
+  chatId: number,
+  messageId: number,
+): StoredMessage | undefined {
+  const row = stmtGet.get(getKey(businessConnectionId, chatId, messageId)) as
+    | Record<string, unknown>
+    | undefined;
   return row ? rowToStoredMessage(row) : undefined;
 }
 
@@ -477,9 +485,10 @@ export interface ExportedMessage extends StoredMessage {
 
 /** Every stored message with its edit chain attached, oldest first. */
 export function exportMessages(chatId?: number): ExportedMessage[] {
-  const messageRows = (
-    chatId === undefined ? stmtExportAll.all() : stmtExportByChat.all(chatId)
-  ) as Record<string, unknown>[];
+  const messageRows = (chatId === undefined ? stmtExportAll.all() : stmtExportByChat.all(chatId)) as Record<
+    string,
+    unknown
+  >[];
   const versionRows = (
     chatId === undefined ? stmtExportVersionsAll.all() : stmtExportVersionsByChat.all(chatId)
   ) as Record<string, unknown>[];
@@ -492,16 +501,25 @@ export function exportMessages(chatId?: number): ExportedMessage[] {
     versionsByKey.set(key, list);
   }
 
-  return messageRows.map((row) => {
+  const exported: ExportedMessage[] = [];
+  for (const row of messageRows) {
     const message = rowToStoredMessage(row);
     const key = getKey(message.businessConnectionId, message.chatId, message.messageId);
-    return { ...message, versions: versionsByKey.get(key) ?? [] };
-  });
+    exported.push(Object.assign(message, { versions: versionsByKey.get(key) ?? [] }));
+  }
+  return exported;
 }
 
 /** Full edit chain for one message, oldest version first. */
-export function getVersions(businessConnectionId: string, chatId: number, messageId: number): MessageVersion[] {
-  const rows = stmtListVersions.all(getKey(businessConnectionId, chatId, messageId)) as Record<string, unknown>[];
+export function getVersions(
+  businessConnectionId: string,
+  chatId: number,
+  messageId: number,
+): MessageVersion[] {
+  const rows = stmtListVersions.all(getKey(businessConnectionId, chatId, messageId)) as Record<
+    string,
+    unknown
+  >[];
   return rows.map(rowToMessageVersion);
 }
 
