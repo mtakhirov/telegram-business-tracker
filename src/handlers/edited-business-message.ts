@@ -17,6 +17,10 @@ composer.on("edited_business_message", async (ctx) => {
 
   const original = getMessage(businessConnectionId, chatId, messageId);
 
+  // Store the new version now, before notifying. If the send fails, the next
+  // edit still compares against the correct previous version.
+  storeMessage(businessConnectionId, chatId, editedMsg);
+
   const user = getUserDisplayName(editedMsg.from);
   const chatName = editedMsg.chat.first_name || editedMsg.chat.title || `Chat ${chatId}`;
 
@@ -62,8 +66,6 @@ composer.on("edited_business_message", async (ctx) => {
 
     await sendBlocks(ctx.api, ADMIN_CHAT_ID, blocks);
   }
-
-  storeMessage(businessConnectionId, chatId, editedMsg);
 });
 
 export default composer;
