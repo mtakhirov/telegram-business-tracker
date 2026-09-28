@@ -5,8 +5,9 @@
  * when it was last seen — so `/chats` can offer a chat that is not archived
  * yet. No message content is stored.
  *
- * A chat with no rule falls back to `DEFAULT_TRACK_MODE`, which makes the
- * archive opt-in when that is set to `deny`.
+ * A chat with no rule falls back to the effective default track mode, which
+ * makes the archive opt-in when that is set to `deny`. The default is read on
+ * every check so `/settings` takes effect without a restart.
  *
  * @example
  * ```ts
@@ -22,8 +23,8 @@
  */
 
 import { desc, eq } from "drizzle-orm";
-import { DEFAULT_TRACK_MODE } from "../../shared/config/index.js";
 import { db } from "../../shared/db/client.js";
+import { getDefaultTrackMode } from "../settings/repository.js";
 import { chatRules, chats } from "../../shared/db/schema.js";
 
 export type TrackMode = "allow" | "deny";
@@ -45,7 +46,7 @@ export function touchChat(chatId: number, title: string | null): void {
 
 export function isChatTracked(chatId: number): boolean {
   const row = db.select({ mode: chatRules.mode }).from(chatRules).where(eq(chatRules.chatId, chatId)).get();
-  return (row?.mode ?? DEFAULT_TRACK_MODE) === "allow";
+  return (row?.mode ?? getDefaultTrackMode().value) === "allow";
 }
 
 export function listChats(): KnownChat[] {

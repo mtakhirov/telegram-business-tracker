@@ -22,7 +22,8 @@ import { cleanupOldMessages } from "../entities/message/repository.js";
 import { cleanupNotificationDetails } from "../entities/notification/repository.js";
 import { closeDb } from "../shared/db/client.js";
 import { COMMANDS } from "../shared/telegram/command-list.js";
-import { OWNER_ID, RETENTION_DAYS } from "../shared/config/index.js";
+import { OWNER_ID } from "../shared/config/index.js";
+import { getRetentionDays } from "../entities/settings/repository.js";
 
 bot.use(commands);
 bot.use(handlers);
@@ -34,13 +35,12 @@ bot.catch((err) => {
 });
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const RETENTION_MS = RETENTION_DAYS * DAY_MS;
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
 const DETAILS_TTL_MS = 7 * DAY_MS;
 
 function runCleanup(): void {
-  const removed = cleanupOldMessages(RETENTION_MS);
+  const removed = cleanupOldMessages(getRetentionDays().value * DAY_MS);
   if (removed > 0) {
     console.log(`🧹 Eskirgan ${removed} ta xabar o'chirildi`);
   }

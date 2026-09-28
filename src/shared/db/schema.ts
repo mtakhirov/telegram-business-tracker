@@ -101,3 +101,9 @@ export const notificationDetails = sqliteTable(
   },
   (table) => [index("idx_details_created").on(table.createdAt), index("idx_details_chat").on(table.chatId)],
 );
+
+export const settings = sqliteTable("settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});

@@ -31,4 +31,5 @@ export const COMMANDS: CommandSpec[] = [
   { command: "history", description: "Chatning oxirgi xabarlari", args: "<chat_id> [limit]" },
   { command: "versions", description: "Xabarning tahrir tarixi", args: "<chat_id> <message_id>" },
   { command: "export", description: "Arxivni JSON fayl sifatida olish", args: "[chat_id]" },
+  { command: "settings", description: "Retention va arxivlash defaultini o'zgartirish", args: "[...]" },
 ];
