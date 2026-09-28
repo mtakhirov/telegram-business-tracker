@@ -1,6 +1,7 @@
 import { Composer } from "grammy";
 import { getStoreSize } from "../../store/message-store.js";
 import { OWNER_ID } from "../../core/config.js";
+import { escapeHtml } from "../../utils/format.js";
 
 const composer = new Composer();
 
@@ -11,7 +12,7 @@ composer.command("start", async (ctx) => {
   const payload = ctx.match;
 
   if (payload && payload.startsWith("bizChat")) {
-    const chatId = payload.slice(7);
+    const chatId = escapeHtml(payload.slice(7));
     await ctx.reply(
       `🤖 <b>Business Chat Tracker</b>\n\n` +
         `Chat <code>#${chatId}</code> boshqarilmoqda.\n\n` +

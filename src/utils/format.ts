@@ -73,16 +73,16 @@ export function getMediaInfo(msg: ContentMessage): MediaInfo | null {
     return { type: "video", fileId: (msg.video as { file_id: string }).file_id, label: "🎥 Video" };
   }
   if (msg.document && (msg.document as { file_id?: string }).file_id) {
-    return { type: "document", fileId: (msg.document as { file_id: string }).file_id, label: `📎 ${msg.document.file_name || "Fayl"}` };
+    return { type: "document", fileId: (msg.document as { file_id: string }).file_id, label: `📎 ${escapeHtml(msg.document.file_name || "Fayl")}` };
   }
   if (msg.voice && (msg.voice as { file_id?: string }).file_id) {
     return { type: "voice", fileId: (msg.voice as { file_id: string }).file_id, label: "🎤 Ovozli xabar" };
   }
   if (msg.audio && (msg.audio as { file_id?: string }).file_id) {
-    return { type: "audio", fileId: (msg.audio as { file_id: string }).file_id, label: `🎵 ${msg.audio.title || "Audio"}` };
+    return { type: "audio", fileId: (msg.audio as { file_id: string }).file_id, label: `🎵 ${escapeHtml(msg.audio.title || "Audio")}` };
   }
   if (msg.sticker && (msg.sticker as { file_id?: string }).file_id) {
-    return { type: "sticker", fileId: (msg.sticker as { file_id: string }).file_id, label: `😀 Sticker ${msg.sticker.emoji || ""}` };
+    return { type: "sticker", fileId: (msg.sticker as { file_id: string }).file_id, label: `😀 Sticker ${escapeHtml(msg.sticker.emoji || "")}` };
   }
   return null;
 }
