@@ -1,11 +1,19 @@
 import { Composer } from "grammy";
 import { ADMIN_CHAT_ID } from "../core/config.js";
 import { getMessage, deleteMessage, isOwnerConnection, isChatTracked } from "../store/message-store.js";
-import { getUserDisplayName, formatDate, getContentDescription, getMediaInfo, escapeHtml } from "../utils/format.js";
+import { getUserDisplayName, formatWhenSeconds, getMediaInfo } from "../utils/format.js";
+import { chatLabel, eventHeader, metaLine, withMeta } from "../utils/notify-format.js";
 import { sendMediaWithBlocks } from "../utils/send-media.js";
 import { quote, sendBlocks } from "../utils/telegram-limits.js";
 
 const composer = new Composer();
+
+interface TextEntry {
+  msgId: number;
+  sender: string | null;
+  when: string | null;
+  content: string;
+}
 
 composer.on("deleted_business_messages", async (ctx) => {
   const deleted = ctx.update.deleted_business_messages!;
@@ -17,79 +25,73 @@ composer.on("deleted_business_messages", async (ctx) => {
   if (!isChatTracked(chat.id)) return;
 
   const messageIds = deleted.message_ids;
-  const chatName = chat.first_name || chat.title || `Chat ${chat.id}`;
+  const label = chatLabel(chat);
+  const single = messageIds.length === 1;
 
-  const header =
-    `🗑 <b>Xabar(lar) o'chirildi!</b>\n\n` +
-    `💬 Chat: ${escapeHtml(chatName)} (<code>${chat.id}</code>)\n` +
-    `📊 O'chirilgan xabarlar soni: ${messageIds.length}`;
+  // In a private chat the chat id equals the counterparty's user id, so a
+  // different sender id means the message was the owner's own.
+  const senderOf = (from?: Parameters<typeof getUserDisplayName>[0]) =>
+    from && from.id !== chat.id ? getUserDisplayName(from) : null;
 
   // Classify without deleting yet. Rows are removed from the store only after
   // the notification for them has been sent, so a send failure never loses data.
-  const textBlocks: string[] = [];
-  const textMsgIds: number[] = [];
+  const entries: TextEntry[] = [];
   const mediaMsgs: { stored: NonNullable<ReturnType<typeof getMessage>>; media: NonNullable<ReturnType<typeof getMediaInfo>>; msgId: number }[] = [];
-  const notFoundIds: number[] = [];
 
   for (const msgId of messageIds) {
     const stored = getMessage(businessConnectionId, chat.id, msgId);
 
     if (!stored) {
-      notFoundIds.push(msgId);
+      entries.push({ msgId, sender: null, when: null, content: "" });
       continue;
     }
 
     const media = getMediaInfo(stored);
     if (media) {
       mediaMsgs.push({ stored, media, msgId });
-    } else {
-      const user = getUserDisplayName(stored.from);
-      const content = stored.text || stored.caption || getContentDescription(stored);
-      const date = formatDate(stored.date);
-
-      const meta =
-        `━━━━━━━━━━━━━━━━━━━━\n` +
-        `🆔 ID: <code>${msgId}</code>\n` +
-        `👤 Kim: ${escapeHtml(user)}\n` +
-        `📅 Yuborilgan: ${date}\n` +
-        `📝 Mazmuni:`;
-      // Long content becomes several blockquote blocks; each stays under the limit.
-      textBlocks.push(meta, ...quote(content));
-      textMsgIds.push(msgId);
+      continue;
     }
+
+    entries.push({
+      msgId,
+      sender: senderOf(stored.from),
+      when: formatWhenSeconds(stored.date),
+      content: stored.text || stored.caption || "",
+    });
   }
 
-  // Send text-only and not-found messages first, then drop those rows only if
-  // the send succeeded. Long output is split across several messages.
-  if (textBlocks.length > 0 || notFoundIds.length > 0) {
-    const notFoundBlocks = notFoundIds.map(
-      (msgId) =>
-        `━━━━━━━━━━━━━━━━━━━━\n` +
-        `🆔 ID: <code>${msgId}</code>\n` +
-        `⚠️ <i>Bu xabar botning xotirasida topilmadi</i>`,
-    );
+  // Send the text notification first, then drop those rows only if it
+  // succeeded. Long output is split across several messages.
+  if (entries.length > 0) {
+    const blocks: string[] = [];
 
-    await sendBlocks(ctx.api, ADMIN_CHAT_ID, [header, ...textBlocks, ...notFoundBlocks]);
-    for (const msgId of textMsgIds) {
-      deleteMessage(businessConnectionId, chat.id, msgId);
+    if (single) {
+      const entry = entries[0]!;
+      const meta = metaLine(`Chat ${chat.id}`, `msg ${entry.msgId}`, entry.sender, entry.when ?? "arxivda yo'q");
+      blocks.push(`${eventHeader("🗑", "O'chirildi", label)}\n${meta}`, ...quote(entry.content));
+    } else {
+      blocks.push(
+        `${eventHeader("🗑", `${messageIds.length} xabar o'chirildi`, label)}\n${metaLine(`Chat ${chat.id}`)}`,
+      );
+      for (const entry of entries) {
+        const meta = metaLine(`msg ${entry.msgId}`, entry.sender, entry.when ?? "arxivda yo'q");
+        blocks.push(...withMeta(meta, quote(entry.content)));
+      }
+    }
+
+    await sendBlocks(ctx.api, ADMIN_CHAT_ID, blocks);
+    for (const entry of entries) {
+      if (entry.when !== null) deleteMessage(businessConnectionId, chat.id, entry.msgId);
     }
   }
 
   // Send each media message separately, deleting each row only after its send.
   for (const { stored, media, msgId } of mediaMsgs) {
-    const user = getUserDisplayName(stored.from);
-    const date = formatDate(stored.date);
-    const content = stored.caption || stored.text || "";
-
     const mediaHeader =
-      `🗑 <b>O'chirilgan xabar</b>\n\n` +
-      `👤 Kim: ${escapeHtml(user)}\n` +
-      `💬 Chat: ${escapeHtml(chatName)}\n` +
-      `🆔 ID: <code>${msgId}</code>\n` +
-      `📅 Yuborilgan: ${date}\n\n` +
-      `[${media.label}]\n` +
-      `━━━━━━━━━━━━━━━━━━━━`;
+      `${eventHeader("🗑", "O'chirildi", label)}\n` +
+      metaLine(`Chat ${chat.id}`, `msg ${msgId}`, senderOf(stored.from), formatWhenSeconds(stored.date), media.word);
 
+    const content = stored.caption || stored.text || "";
     await sendMediaWithBlocks(ctx.api, ADMIN_CHAT_ID, media, mediaHeader, quote(content));
     deleteMessage(businessConnectionId, chat.id, msgId);
   }
