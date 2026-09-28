@@ -1,6 +1,6 @@
 import { Composer } from "grammy";
 import { ADMIN_CHAT_ID } from "../core/config.js";
-import { getMessage, storeMessage } from "../store/message-store.js";
+import { getMessage, storeMessage, isOwnerConnection } from "../store/message-store.js";
 import { getUserDisplayName, formatDate, getContentDescription, getMediaInfo, getMediaLabel, escapeHtml } from "../utils/format.js";
 import { sendMedia } from "../utils/send-media.js";
 
@@ -11,6 +11,8 @@ composer.on("edited_business_message", async (ctx) => {
   const businessConnectionId = editedMsg.business_connection_id!;
   const chatId = editedMsg.chat.id;
   const messageId = editedMsg.message_id;
+
+  if (!isOwnerConnection(businessConnectionId)) return;
 
   const original = getMessage(businessConnectionId, chatId, messageId);
 

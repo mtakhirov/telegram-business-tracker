@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import path from "node:path";
 import fs from "node:fs";
 import type { User } from "grammy/types";
+import { OWNER_ID } from "../core/config.js";
 
 export interface StoredMessage {
   messageId: number;
@@ -194,6 +195,12 @@ export function getConnection(id: string): StoredConnection | undefined {
 
 export function saveConnection(conn: StoredConnection): void {
   stmtUpsertConnection.run(conn.id, conn.userId, conn.isEnabled ? 1 : 0, Date.now());
+}
+
+/** True only for a connection owned by OWNER_ID that is currently enabled. */
+export function isOwnerConnection(id: string): boolean {
+  const conn = getConnection(id);
+  return !!conn && conn.userId === OWNER_ID && conn.isEnabled;
 }
 
 export function closeStore(): void {

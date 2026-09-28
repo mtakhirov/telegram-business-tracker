@@ -1,9 +1,13 @@
 import { Composer } from "grammy";
 import { getStoreSize } from "../../store/message-store.js";
+import { OWNER_ID } from "../../core/config.js";
 
 const composer = new Composer();
 
 composer.command("start", async (ctx) => {
+  // Private tool: ignore everyone except the owner, and reveal nothing.
+  if (ctx.from?.id !== OWNER_ID) return;
+
   const payload = ctx.match;
 
   if (payload && payload.startsWith("bizChat")) {
