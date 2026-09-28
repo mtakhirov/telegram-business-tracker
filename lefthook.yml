@@ -6,7 +6,7 @@ pre-commit:
       run: bunx tsc --noEmit
     test:
       glob: "*.ts"
-      run: bun test
+      run: bun run test
 
 commit-msg:
   commands:

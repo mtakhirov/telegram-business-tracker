@@ -8,23 +8,6 @@ export function getUserDisplayName(user?: User): string {
   return user.username ? `${name} (@${user.username})` : name;
 }
 
-export function formatDateTime(date: Date): string {
-  return date.toLocaleString("uz-UZ", {
-    timeZone: "Asia/Tashkent",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
-
-/** Formats a Telegram timestamp, which is in seconds. */
-export function formatDate(timestamp: number): string {
-  return formatDateTime(new Date(timestamp * 1000));
-}
-
 const TIME_ZONE = "Asia/Tashkent";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -93,26 +76,11 @@ interface ContentMessage {
   animation?: unknown | null;
 }
 
-export function getContentDescription(msg: ContentMessage): string {
-  if (msg.text) return msg.text;
-  if (msg.caption) return `[Media + caption]: ${msg.caption}`;
-  if (msg.photo) return "[📷 Rasm]";
-  if (msg.video) return "[🎥 Video]";
-  if (msg.document) return `[📎 Fayl: ${msg.document.file_name || "nomsiz"}]`;
-  if (msg.sticker) return `[😀 Sticker: ${msg.sticker.emoji || ""}]`;
-  if (msg.voice) return "[🎤 Ovozli xabar]";
-  if (msg.audio) return `[🎵 Audio: ${msg.audio.title || "nomsiz"}]`;
-  if (msg.animation) return "[🎞 GIF]";
-  return "[📨 Boshqa turdagi xabar]";
-}
-
 export type MediaType = "photo" | "video" | "document" | "voice" | "audio" | "animation" | "sticker";
 
 export interface MediaInfo {
   type: MediaType;
   fileId: string;
-  /** Bracketed label with an emoji. Superseded by `word`. */
-  label: string;
   /**
    * Plain lowercase type word for a meta line, e.g. "rasm", "fayl: hisobot.pdf".
    * Already HTML-escaped where it embeds a file name or title.
@@ -128,31 +96,27 @@ function mediaWord(kind: string, detail?: string): string {
 
 export function getMediaInfo(msg: ContentMessage): MediaInfo | null {
   if (msg.animation && (msg.animation as { file_id?: string }).file_id) {
-    return { type: "animation", fileId: (msg.animation as { file_id: string }).file_id, label: "🎞 GIF", word: "GIF" };
+    return { type: "animation", fileId: (msg.animation as { file_id: string }).file_id, word: "GIF" };
   }
   if (msg.photo && Array.isArray(msg.photo) && msg.photo.length > 0) {
     const largest = msg.photo[msg.photo.length - 1] as { file_id: string };
-    return { type: "photo", fileId: largest.file_id, label: "📷 Rasm", word: "rasm" };
+    return { type: "photo", fileId: largest.file_id, word: "rasm" };
   }
   if (msg.video && (msg.video as { file_id?: string }).file_id) {
-    return { type: "video", fileId: (msg.video as { file_id: string }).file_id, label: "🎥 Video", word: "video" };
+    return { type: "video", fileId: (msg.video as { file_id: string }).file_id, word: "video" };
   }
   if (msg.document && (msg.document as { file_id?: string }).file_id) {
-    return { type: "document", fileId: (msg.document as { file_id: string }).file_id, label: `📎 ${escapeHtml(msg.document.file_name || "Fayl")}`, word: mediaWord("fayl", msg.document.file_name) };
+    return { type: "document", fileId: (msg.document as { file_id: string }).file_id, word: mediaWord("fayl", msg.document.file_name) };
   }
   if (msg.voice && (msg.voice as { file_id?: string }).file_id) {
-    return { type: "voice", fileId: (msg.voice as { file_id: string }).file_id, label: "🎤 Ovozli xabar", word: "ovozli xabar" };
+    return { type: "voice", fileId: (msg.voice as { file_id: string }).file_id, word: "ovozli xabar" };
   }
   if (msg.audio && (msg.audio as { file_id?: string }).file_id) {
-    return { type: "audio", fileId: (msg.audio as { file_id: string }).file_id, label: `🎵 ${escapeHtml(msg.audio.title || "Audio")}`, word: mediaWord("audio", msg.audio.title) };
+    return { type: "audio", fileId: (msg.audio as { file_id: string }).file_id, word: mediaWord("audio", msg.audio.title) };
   }
   if (msg.sticker && (msg.sticker as { file_id?: string }).file_id) {
-    return { type: "sticker", fileId: (msg.sticker as { file_id: string }).file_id, label: `😀 Sticker ${escapeHtml(msg.sticker.emoji || "")}`, word: mediaWord("sticker", msg.sticker.emoji) };
+    return { type: "sticker", fileId: (msg.sticker as { file_id: string }).file_id, word: mediaWord("sticker", msg.sticker.emoji) };
   }
   return null;
 }
 
-export function getMediaLabel(msg: ContentMessage): string | null {
-  const info = getMediaInfo(msg);
-  return info ? `[${info.label}]` : null;
-}
