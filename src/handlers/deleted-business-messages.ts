@@ -21,38 +21,42 @@ composer.on("deleted_business_messages", async (ctx) => {
     `💬 Chat: ${escapeHtml(chatName)} (<code>${chat.id}</code>)\n` +
     `📊 O'chirilgan xabarlar soni: ${messageIds.length}`;
 
-  // Collect text-only messages and media messages separately
+  // Classify without deleting yet. Rows are removed from the store only after
+  // the notification for them has been sent, so a send failure never loses data.
   const textParts: string[] = [];
+  const textMsgIds: number[] = [];
   const mediaMsgs: { stored: NonNullable<ReturnType<typeof getMessage>>; media: NonNullable<ReturnType<typeof getMediaInfo>>; msgId: number }[] = [];
   const notFoundIds: number[] = [];
 
   for (const msgId of messageIds) {
     const stored = getMessage(businessConnectionId, chat.id, msgId);
 
-    if (stored) {
-      const media = getMediaInfo(stored);
-      if (media) {
-        mediaMsgs.push({ stored, media, msgId });
-      } else {
-        const user = getUserDisplayName(stored.from);
-        const content = stored.text || stored.caption || getContentDescription(stored);
-        const date = formatDate(stored.date);
-
-        textParts.push(
-          `━━━━━━━━━━━━━━━━━━━━\n` +
-          `🆔 ID: <code>${msgId}</code>\n` +
-          `👤 Kim: ${escapeHtml(user)}\n` +
-          `📅 Yuborilgan: ${date}\n` +
-          `📝 Mazmuni:\n<blockquote>${escapeHtml(content)}</blockquote>`,
-        );
-      }
-      deleteMessage(businessConnectionId, chat.id, msgId);
-    } else {
+    if (!stored) {
       notFoundIds.push(msgId);
+      continue;
+    }
+
+    const media = getMediaInfo(stored);
+    if (media) {
+      mediaMsgs.push({ stored, media, msgId });
+    } else {
+      const user = getUserDisplayName(stored.from);
+      const content = stored.text || stored.caption || getContentDescription(stored);
+      const date = formatDate(stored.date);
+
+      textParts.push(
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `🆔 ID: <code>${msgId}</code>\n` +
+        `👤 Kim: ${escapeHtml(user)}\n` +
+        `📅 Yuborilgan: ${date}\n` +
+        `📝 Mazmuni:\n<blockquote>${escapeHtml(content)}</blockquote>`,
+      );
+      textMsgIds.push(msgId);
     }
   }
 
-  // Send text-only and not-found messages as a single text message
+  // Send text-only and not-found messages as a single text message, then drop
+  // the rows only if that send succeeded.
   if (textParts.length > 0 || notFoundIds.length > 0) {
     let text = header + "\n\n";
     text += textParts.join("\n\n");
@@ -65,9 +69,12 @@ composer.on("deleted_business_messages", async (ctx) => {
     }
 
     await ctx.api.sendMessage(ADMIN_CHAT_ID, text, { parse_mode: "HTML" });
+    for (const msgId of textMsgIds) {
+      deleteMessage(businessConnectionId, chat.id, msgId);
+    }
   }
 
-  // Send each media message separately with its caption
+  // Send each media message separately, deleting each row only after its send.
   for (const { stored, media, msgId } of mediaMsgs) {
     const user = getUserDisplayName(stored.from);
     const date = formatDate(stored.date);
@@ -87,11 +94,7 @@ composer.on("deleted_business_messages", async (ctx) => {
     }
 
     await sendMedia(ctx.api, ADMIN_CHAT_ID, media, caption);
-  }
-
-  // If everything was media (no text sent yet), still send header if no textParts
-  if (textParts.length === 0 && notFoundIds.length === 0 && mediaMsgs.length > 0) {
-    // Header was already included in each media caption, no extra message needed
+    deleteMessage(businessConnectionId, chat.id, msgId);
   }
 });
 
