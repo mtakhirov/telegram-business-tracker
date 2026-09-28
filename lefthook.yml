@@ -4,6 +4,9 @@ pre-commit:
     typecheck:
       glob: "*.ts"
       run: bunx tsc --noEmit
+    test:
+      glob: "*.ts"
+      run: bun test
 
 commit-msg:
   commands:

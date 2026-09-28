@@ -21,6 +21,8 @@ export default defineEnv({
     OWNER_ID: z.coerce.number().int().positive().optional(),
     /** Display name used in the bot's own messages. */
     BOT_NAME: z.string().min(1).default("Business Chat Archive"),
+    /** SQLite database file. Relative paths resolve against the working directory. */
+    DB_PATH: z.string().min(1).default("data/messages.db"),
     /** Days to keep stored messages before automatic cleanup. */
     RETENTION_DAYS: z.coerce.number().int().min(1).default(30),
     /**

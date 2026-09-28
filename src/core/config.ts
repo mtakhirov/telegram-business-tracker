@@ -3,6 +3,7 @@ import env from "./env.js";
 export const BOT_TOKEN = env.BOT_TOKEN;
 export const ADMIN_CHAT_ID = env.ADMIN_CHAT_ID;
 export const BOT_NAME = env.BOT_NAME;
+export const DB_PATH = env.DB_PATH;
 export const RETENTION_DAYS = env.RETENTION_DAYS;
 export const DEFAULT_TRACK_MODE = env.DEFAULT_TRACK_MODE;
 

@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import path from "node:path";
 import fs from "node:fs";
 import type { User } from "grammy/types";
-import { DEFAULT_TRACK_MODE, OWNER_ID } from "../core/config.js";
+import { DB_PATH, DEFAULT_TRACK_MODE, OWNER_ID } from "../core/config.js";
 
 export interface StoredMessage {
   messageId: number;
@@ -47,12 +47,12 @@ export interface StoredConnection {
 // The database holds other people's private messages: keep it readable by the bot user only.
 process.umask(0o077);
 
-const dbDir = path.resolve("data");
+const dbPath = path.resolve(DB_PATH);
+const dbDir = path.dirname(dbPath);
 if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true, mode: 0o700 });
 }
 
-const dbPath = path.join(dbDir, "messages.db");
 const db = new Database(dbPath);
 
 for (const file of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) {
