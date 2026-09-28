@@ -87,6 +87,7 @@ db.exec(`
 `);
 db.exec("CREATE INDEX IF NOT EXISTS idx_messages_stored_at ON messages (stored_at)");
 db.exec("CREATE INDEX IF NOT EXISTS idx_messages_connection ON messages (business_connection_id)");
+db.exec("CREATE INDEX IF NOT EXISTS idx_messages_chat ON messages (chat_id, date)");
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS business_connections (
@@ -172,6 +173,13 @@ const stmtSetChatRule = db.prepare(`
 `);
 const stmtDeleteChatRule = db.prepare("DELETE FROM chat_rules WHERE chat_id = ?");
 const stmtDeleteMessagesByChat = db.prepare("DELETE FROM messages WHERE chat_id = ?");
+
+const stmtSearch = db.prepare(`
+  SELECT * FROM messages
+  WHERE text LIKE ? ESCAPE '\\' OR caption LIKE ? ESCAPE '\\'
+  ORDER BY date DESC LIMIT ?
+`);
+const stmtChatMessages = db.prepare("SELECT * FROM messages WHERE chat_id = ? ORDER BY date DESC LIMIT ?");
 
 const stmtLatestVersion = db.prepare(
   "SELECT version, text, caption FROM message_versions WHERE key = ? ORDER BY version DESC LIMIT 1",
@@ -368,6 +376,24 @@ export function clearChatRule(chatId: number): void {
 export function deleteMessagesByChat(chatId: number): number {
   stmtDeleteVersionsByChat.run(chatId);
   return stmtDeleteMessagesByChat.run(chatId).changes;
+}
+
+/** Escapes LIKE wildcards so a query is matched literally. */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
+/** Substring search over stored text and captions, newest first. */
+export function searchMessages(query: string, limit: number): StoredMessage[] {
+  const pattern = `%${escapeLike(query)}%`;
+  const rows = stmtSearch.all(pattern, pattern, limit) as Record<string, unknown>[];
+  return rows.map(rowToStoredMessage);
+}
+
+/** Most recent stored messages in one chat, newest first. */
+export function listChatMessages(chatId: number, limit: number): StoredMessage[] {
+  const rows = stmtChatMessages.all(chatId, limit) as Record<string, unknown>[];
+  return rows.map(rowToStoredMessage);
 }
 
 export interface MessageVersion {
