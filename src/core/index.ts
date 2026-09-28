@@ -1,6 +1,6 @@
 import { bot } from "./bot.js";
 import commands from "../commands/index.js";
-import handlers from "../handlers/index.js";
+import handlers, { ALLOWED_UPDATES } from "../handlers/index.js";
 import { cleanupNotificationDetails, cleanupOldMessages, closeStore } from "../store/message-store.js";
 import { COMMANDS } from "../commands/list.js";
 import { OWNER_ID, RETENTION_DAYS } from "./config.js";
@@ -71,12 +71,4 @@ void publishCommands();
 
 // Start bot
 console.log("🚀 Bot ishga tushmoqda...");
-bot.start({
-  allowed_updates: [
-    "message",
-    "business_connection",
-    "business_message",
-    "edited_business_message",
-    "deleted_business_messages",
-  ],
-});
+bot.start({ allowed_updates: [...ALLOWED_UPDATES] });
