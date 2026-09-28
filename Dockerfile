@@ -2,12 +2,6 @@ FROM oven/bun:alpine AS build
 WORKDIR /app
 
 COPY package.json bun.lock* ./
-
-RUN apk update && apk add --no-cache \
-    python3 \
-    make \
-    g++
-
 RUN bun install --frozen-lockfile
 
 COPY . .
@@ -17,4 +11,9 @@ FROM oven/bun:alpine AS production
 WORKDIR /app
 
 COPY --from=build /app /app
+
+# Persisted data lives here; owned by the unprivileged bun user.
+RUN mkdir -p /app/data && chown -R bun:bun /app
+
+USER bun
 ENTRYPOINT [ "bun", "--bun", "run", "start" ]
