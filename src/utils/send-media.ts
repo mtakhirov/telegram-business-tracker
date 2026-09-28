@@ -1,4 +1,5 @@
 import type { Api } from "grammy";
+import type { InlineKeyboardMarkup } from "grammy/types";
 import type { MediaInfo } from "./format.js";
 import { MAX_CAPTION_LENGTH, packBlocks, sendBlocks } from "./telegram-limits.js";
 
@@ -29,8 +30,9 @@ export async function sendMedia(
   chatId: number | string,
   media: MediaInfo,
   caption: string,
+  replyMarkup?: InlineKeyboardMarkup,
 ): Promise<void> {
-  const opts = { caption, parse_mode: "HTML" as const };
+  const opts = { caption, parse_mode: "HTML" as const, reply_markup: replyMarkup };
 
   switch (media.type) {
     case "photo":
@@ -54,7 +56,7 @@ export async function sendMedia(
     case "sticker":
       // Sticker doesn't support caption, send sticker + text separately
       await api.sendSticker(chatId, media.fileId);
-      await api.sendMessage(chatId, caption, { parse_mode: "HTML" });
+      await api.sendMessage(chatId, caption, { parse_mode: "HTML", reply_markup: replyMarkup });
       break;
   }
 }

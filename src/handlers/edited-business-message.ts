@@ -1,10 +1,10 @@
 import { Composer } from "grammy";
 import { ADMIN_CHAT_ID } from "../core/config.js";
 import { getMessage, storeMessage, isOwnerConnection, isChatTracked } from "../store/message-store.js";
-import { getUserDisplayName, formatWhenSeconds, getMediaInfo } from "../utils/format.js";
-import { chatLabel, eventHeader, metaLine, withNote } from "../utils/notify-format.js";
-import { sendMediaWithBlocks } from "../utils/send-media.js";
-import { diffBlocks, sendBlocks } from "../utils/telegram-limits.js";
+import { getUserDisplayName, formatExactSeconds, getMediaInfo } from "../utils/format.js";
+import { chatSubject, eventHeader, metaLine, userLink, withNote } from "../utils/notify-format.js";
+import { sendNotification } from "../utils/notify.js";
+import { diffBlocks } from "../utils/telegram-limits.js";
 
 const composer = new Composer();
 
@@ -25,24 +25,33 @@ composer.on("edited_business_message", async (ctx) => {
   storeMessage(businessConnectionId, chatId, editedMsg);
 
   // A sender id different from the chat id means the owner edited their own message.
-  const sender = editedMsg.from && editedMsg.from.id !== chatId ? getUserDisplayName(editedMsg.from) : null;
+  const sender =
+    editedMsg.from && editedMsg.from.id !== chatId
+      ? userLink(editedMsg.from, getUserDisplayName(editedMsg.from))
+      : null;
   const media = getMediaInfo(editedMsg);
 
-  const header =
-    `${eventHeader("✏️", "Tahrirlandi", chatLabel(chat))}\n` +
-    metaLine(`Chat ${chatId}`, `msg ${messageId}`, sender, formatWhenSeconds(editedMsg.edit_date!), media?.word);
+  const header = eventHeader("✏️", "Tahrirlandi", chatSubject(chat));
+  const meta = metaLine(
+    `Chat ${chatId}`,
+    `msg ${messageId}`,
+    sender,
+    formatExactSeconds(editedMsg.edit_date!),
+    media?.word,
+  );
 
   const oldContent = original ? original.text || original.caption || null : null;
   const newContent = editedMsg.text || editedMsg.caption || "";
 
-  let blocks = diffBlocks(oldContent, newContent);
-  if (!original) blocks = withNote(blocks, "asl nusxa arxivda yo'q");
+  let body = diffBlocks(oldContent, newContent);
+  if (!original) body = withNote(body, "asl nusxa arxivda yo'q");
 
-  if (media) {
-    await sendMediaWithBlocks(ctx.api, ADMIN_CHAT_ID, media, header, blocks);
-  } else {
-    await sendBlocks(ctx.api, ADMIN_CHAT_ID, [header, ...blocks]);
-  }
+  await sendNotification(ctx.api, ADMIN_CHAT_ID, {
+    sourceChatId: chatId,
+    media,
+    compact: [header, ...body],
+    expanded: [`${header}\n${meta}`, ...body, `/history ${chatId}\n/versions ${chatId} ${messageId}`],
+  });
 });
 
 export default composer;

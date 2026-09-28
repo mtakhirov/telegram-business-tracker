@@ -1,7 +1,7 @@
 import { Composer } from "grammy";
 import { ADMIN_CHAT_ID, OWNER_ID } from "../core/config.js";
 import { getUserDisplayName } from "../utils/format.js";
-import { eventHeader, metaLine } from "../utils/notify-format.js";
+import { eventHeader, metaLine, userLink } from "../utils/notify-format.js";
 import { saveConnection, deleteMessagesByConnection } from "../store/message-store.js";
 
 const composer = new Composer();
@@ -16,7 +16,7 @@ composer.on("business_connection", async (ctx) => {
     await ctx.api.sendMessage(
       ADMIN_CHAT_ID,
       `${eventHeader("🚫", "Ruxsatsiz ulanish urinishi")}\n` +
-        `${metaLine(getUserDisplayName(conn.user), `user ${conn.user.id}`)}\n\n` +
+        `${metaLine(userLink(conn.user, getUserDisplayName(conn.user)), `user ${conn.user.id}`)}\n\n` +
         `Hech narsa saqlanmadi.`,
       { parse_mode: "HTML" },
     );

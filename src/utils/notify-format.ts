@@ -41,6 +41,13 @@ export function chatLabel(chat: { id: number; title?: string; first_name?: strin
   return chat.title || chat.first_name || `Chat ${chat.id}`;
 }
 
+export interface LinkableChat {
+  id: number;
+  title?: string;
+  first_name?: string;
+  username?: string;
+}
+
 export interface LinkableUser {
   id: number;
   username?: string;
@@ -66,4 +73,14 @@ export function userLink(user: LinkableUser | undefined, text: string): string {
       : `tg://user?id=${user.id}`;
 
   return `<a href="${href}">${safeText}</a>`;
+}
+
+/**
+ * Header subject for a chat: a profile link for a private chat, whose id is the
+ * counterparty's user id, and plain escaped text for a group or channel.
+ */
+export function chatSubject(chat: LinkableChat): string {
+  const label = chatLabel(chat);
+  if (chat.title) return escapeHtml(label);
+  return userLink({ id: chat.id, username: chat.username }, label);
 }
