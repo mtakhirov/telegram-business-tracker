@@ -2,7 +2,7 @@ import { Composer, type CommandContext, type Context } from "grammy";
 import { DEFAULT_TRACK_MODE, OWNER_ID } from "../../core/config.js";
 import { clearChatRule, deleteMessagesByChat, listChats, setChatRule } from "../../store/message-store.js";
 import { escapeHtml } from "../../utils/format.js";
-import { metaLine } from "../../utils/notify-format.js";
+import { metaLine, userLink } from "../../utils/notify-format.js";
 import { sendBlocks } from "../../utils/telegram-limits.js";
 
 const composer = new Composer();
@@ -37,7 +37,10 @@ composer.command("chats", async (ctx) => {
         .map((chat) => {
           const effective = chat.mode ?? DEFAULT_TRACK_MODE;
           const icon = effective === "allow" ? "✓" : "✗";
-          const name = chat.title ? escapeHtml(chat.title) : `Chat ${chat.chatId}`;
+          // A positive id is a private chat, so it doubles as the user id.
+          // The chats table has no username, so this is always the id form.
+          const label = chat.title ?? `Chat ${chat.chatId}`;
+          const name = chat.chatId > 0 ? userLink({ id: chat.chatId }, label) : escapeHtml(label);
           const rule = chat.mode ? " (qoida)" : "";
           return `${metaLine(`${icon} ${name}`, `${chat.chatId}`)}${rule}`;
         })

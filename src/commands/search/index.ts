@@ -2,7 +2,7 @@ import { Composer } from "grammy";
 import { OWNER_ID } from "../../core/config.js";
 import { listChatMessages, searchMessages, type StoredMessage } from "../../store/message-store.js";
 import { escapeHtml, formatWhenSeconds, getMediaInfo, getUserDisplayName } from "../../utils/format.js";
-import { metaLine, withMeta } from "../../utils/notify-format.js";
+import { metaLine, userLink, withMeta } from "../../utils/notify-format.js";
 import { contentBlocks, sendBlocks } from "../../utils/telegram-limits.js";
 
 const composer = new Composer();
@@ -20,7 +20,9 @@ function resultBlocks(message: StoredMessage, options: { showChat: boolean }): s
   // In a private chat the chat id equals the counterparty's user id, so a
   // different sender id means the message was the owner's own.
   const sender =
-    message.from && message.from.id !== message.chatId ? getUserDisplayName(message.from) : null;
+    message.from && message.from.id !== message.chatId
+      ? userLink(message.from, getUserDisplayName(message.from))
+      : null;
 
   const meta = metaLine(
     options.showChat ? `Chat ${message.chatId}` : null,
