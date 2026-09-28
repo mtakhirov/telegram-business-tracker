@@ -68,7 +68,7 @@ a missing or malformed value stops the bot with an explicit message. To inspect
 the schema interactively:
 
 ```bash
-bunx @envin/cli@latest dev -c src/core/env.ts
+bunx @envin/cli@latest dev -c src/shared/config/env.ts
 ```
 
 ## Run

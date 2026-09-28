@@ -2,7 +2,7 @@
   "name": "telegram-business-tracker",
   "version": "1.0.0",
   "type": "module",
-  "main": "dist/core/index.js",
+  "main": "dist/app/index.js",
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
@@ -14,8 +14,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "start": "bun dist/core/index.js",
-    "dev": "bun --watch src/core/index.ts",
+    "start": "bun dist/app/index.js",
+    "dev": "bun --watch src/app/index.ts",
     "prepare": "lefthook install"
   },
   "dependencies": {
