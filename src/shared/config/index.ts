@@ -25,6 +25,9 @@ export const DB_PATH = env.DB_PATH;
 export const RETENTION_DAYS = env.RETENTION_DAYS;
 export const DEFAULT_TRACK_MODE = env.DEFAULT_TRACK_MODE;
 export const HEALTH_PORT = env.HEALTH_PORT;
+export const BACKUP_DIR = env.BACKUP_DIR;
+export const BACKUP_INTERVAL_HOURS = env.BACKUP_INTERVAL_HOURS;
+export const BACKUP_KEEP = env.BACKUP_KEEP;
 
 export const OWNER_ID = env.OWNER_ID ?? Number(ADMIN_CHAT_ID);
 if (!Number.isSafeInteger(OWNER_ID) || OWNER_ID <= 0) {

@@ -34,6 +34,9 @@ export default defineEnv({
     RETENTION_DAYS: z.coerce.number().int().min(1).default(30),
     DEFAULT_TRACK_MODE: z.enum(["allow", "deny"]).default("allow"),
     HEALTH_PORT: z.coerce.number().int().min(0).max(65535).default(3000),
+    BACKUP_DIR: z.string().min(1).default("data/backups"),
+    BACKUP_INTERVAL_HOURS: z.coerce.number().int().min(0).default(24),
+    BACKUP_KEEP: z.coerce.number().int().min(1).default(7),
   },
   env: process.env,
   onError: (issues) => {

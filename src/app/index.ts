@@ -22,7 +22,8 @@ import { cleanupOldMessages } from "../entities/message/repository.js";
 import { cleanupNotificationDetails } from "../entities/notification/repository.js";
 import { closeDb } from "../shared/db/client.js";
 import { COMMANDS } from "../shared/telegram/command-list.js";
-import { OWNER_ID } from "../shared/config/index.js";
+import { BACKUP_INTERVAL_HOURS, BACKUP_KEEP, OWNER_ID } from "../shared/config/index.js";
+import { runBackup } from "../shared/db/backup.js";
 import { log } from "../shared/lib/logger.js";
 import { startHealthServer } from "./health.js";
 import { getRetentionDays } from "../entities/settings/repository.js";
@@ -53,12 +54,27 @@ runCleanup();
 const cleanupTimer = setInterval(runCleanup, CLEANUP_INTERVAL_MS);
 const healthServer = startHealthServer();
 
+const backupTimer =
+  BACKUP_INTERVAL_HOURS === 0
+    ? undefined
+    : setInterval(
+        () => {
+          try {
+            runBackup(BACKUP_KEEP);
+          } catch (error) {
+            log.error({ err: error instanceof Error ? error.message : error }, "snapshot failed");
+          }
+        },
+        BACKUP_INTERVAL_HOURS * 60 * 60 * 1000,
+      );
+
 let shuttingDown = false;
 async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   log.info({ signal }, "shutting down");
   clearInterval(cleanupTimer);
+  if (backupTimer) clearInterval(backupTimer);
   healthServer?.stop();
   await bot.stop();
   closeDb();
