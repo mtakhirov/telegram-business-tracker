@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { escapeHtml, getContentDescription, getMediaInfo, getMediaLabel, getUserDisplayName } from "./format.js";
+import {
+  escapeHtml,
+  formatWhen,
+  getContentDescription,
+  getMediaInfo,
+  getMediaLabel,
+  getUserDisplayName,
+} from "./format.js";
 
 describe("escapeHtml", () => {
   test("escapes the characters Telegram parses as markup", () => {
@@ -45,7 +52,8 @@ describe("getMediaInfo", () => {
 
   test("picks the largest photo size", () => {
     const info = getMediaInfo({ photo: [{ file_id: "small" }, { file_id: "large" }] });
-    expect(info).toEqual({ type: "photo", fileId: "large", label: "📷 Rasm" });
+    expect(info?.type).toBe("photo");
+    expect(info?.fileId).toBe("large");
   });
 
   test("returns null when there is no media", () => {
@@ -78,5 +86,47 @@ describe("getContentDescription", () => {
 
   test("falls back for unknown content", () => {
     expect(getContentDescription({})).toBe("[📨 Boshqa turdagi xabar]");
+  });
+});
+
+describe("formatWhen", () => {
+  const now = new Date("2026-09-28T12:00:00Z"); // 17:00 in Asia/Tashkent
+
+  test("shows time only for today", () => {
+    expect(formatWhen(new Date("2026-09-28T09:32:00Z"), now)).toBe("14:32");
+  });
+
+  test("prefixes yesterday", () => {
+    expect(formatWhen(new Date("2026-09-27T09:32:00Z"), now)).toBe("kecha 14:32");
+  });
+
+  test("adds day and month within the year", () => {
+    expect(formatWhen(new Date("2026-09-20T09:32:00Z"), now)).toBe("20.09 14:32");
+  });
+
+  test("adds a two-digit year before that", () => {
+    expect(formatWhen(new Date("2025-09-20T09:32:00Z"), now)).toBe("20.09.25 14:32");
+  });
+
+  test("uses the Tashkent day boundary", () => {
+    // 20:00 UTC is already the next day in Tashkent (01:00).
+    expect(formatWhen(new Date("2026-09-27T20:00:00Z"), now)).toBe("01:00");
+  });
+});
+
+describe("media words", () => {
+  test("names a plain type without emoji", () => {
+    expect(getMediaInfo({ photo: [{ file_id: "P" }] })?.word).toBe("rasm");
+    expect(getMediaInfo({ voice: { file_id: "V" } as never })?.word).toBe("ovozli xabar");
+  });
+
+  test("appends and escapes a document name", () => {
+    expect(getMediaInfo({ document: { file_id: "D", file_name: "a<b>.pdf" } as never })?.word).toBe(
+      "fayl: a&lt;b&gt;.pdf",
+    );
+  });
+
+  test("falls back to the bare kind with no detail", () => {
+    expect(getMediaInfo({ document: { file_id: "D" } as never })?.word).toBe("fayl");
   });
 });

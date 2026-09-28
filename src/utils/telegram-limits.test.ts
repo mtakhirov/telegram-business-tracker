@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { MAX_MESSAGE_LENGTH, packBlocks, quote, splitText } from "./telegram-limits.js";
+import { MAX_MESSAGE_LENGTH, packBlocks, quote, quoteDiff, splitText } from "./telegram-limits.js";
 
 describe("splitText", () => {
   test("returns the text unchanged when it fits", () => {
@@ -76,6 +76,34 @@ describe("packBlocks", () => {
     const blocks = Array.from({ length: 50 }, (_, index) => `block-${index}`.repeat(20));
     for (const message of packBlocks(blocks, 500)) {
       expect(message.length).toBeLessThanOrEqual(500);
+    }
+  });
+});
+
+describe("quoteDiff", () => {
+  test("puts struck old text above new text in one blockquote", () => {
+    expect(quoteDiff("salom qalaysan", "salom, qalaysan?")).toEqual([
+      "<blockquote><s>salom qalaysan</s>\nsalom, qalaysan?</blockquote>",
+    ]);
+  });
+
+  test("escapes both sides", () => {
+    expect(quoteDiff("<b>", "a & b")).toEqual(["<blockquote><s>&lt;b&gt;</s>\na &amp; b</blockquote>"]);
+  });
+
+  test("quotes only the new text when there is no old text", () => {
+    expect(quoteDiff(null, "yangi")).toEqual(["<blockquote>yangi</blockquote>"]);
+  });
+
+  test("splits into separate blocks when combined is too long", () => {
+    const blocks = quoteDiff("a ".repeat(3000), "b ".repeat(3000), MAX_MESSAGE_LENGTH);
+    expect(blocks.length).toBeGreaterThan(1);
+    for (const block of blocks) {
+      expect(block.length).toBeLessThanOrEqual(MAX_MESSAGE_LENGTH);
+      // Each <s> must open and close inside a single block.
+      const opens = block.split("<s>").length - 1;
+      const closes = block.split("</s>").length - 1;
+      expect(opens).toBe(closes);
     }
   });
 });
