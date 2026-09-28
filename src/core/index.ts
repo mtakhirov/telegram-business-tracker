@@ -2,7 +2,8 @@ import { bot } from "./bot.js";
 import commands from "../commands/index.js";
 import handlers from "../handlers/index.js";
 import { cleanupOldMessages, closeStore } from "../store/message-store.js";
-import { RETENTION_DAYS } from "./config.js";
+import { COMMANDS } from "../commands/list.js";
+import { OWNER_ID, RETENTION_DAYS } from "./config.js";
 
 // Register commands and handlers via Composer
 bot.use(commands);
@@ -46,6 +47,21 @@ async function shutdown(signal: string): Promise<void> {
 
 process.once("SIGINT", () => void shutdown("SIGINT"));
 process.once("SIGTERM", () => void shutdown("SIGTERM"));
+
+// Publish the command menu to the owner's chat only, since every command is
+// owner-only. A failure here must not stop the bot from starting.
+async function publishCommands(): Promise<void> {
+  try {
+    await bot.api.setMyCommands(
+      COMMANDS.map(({ command, description }) => ({ command, description })),
+      { scope: { type: "chat", chat_id: OWNER_ID } },
+    );
+  } catch (error) {
+    console.warn("Buyruqlar menyusini o'rnatib bo'lmadi:", error instanceof Error ? error.message : error);
+  }
+}
+
+void publishCommands();
 
 // Start bot
 console.log("🚀 Bot ishga tushmoqda...");

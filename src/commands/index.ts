@@ -5,8 +5,10 @@ import chats from "./chats/index.js";
 import versions from "./versions/index.js";
 import search from "./search/index.js";
 import exportCmd from "./export/index.js";
+import help from "./help/index.js";
 
 const composer = new Composer();
+composer.use(help);
 composer.use(start);
 composer.use(stats);
 composer.use(chats);
