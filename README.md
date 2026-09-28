@@ -125,9 +125,19 @@ All commands are owner-only and silently ignore everyone else.
 | Event        | Behaviour                                                              |
 | ------------ | ---------------------------------------------------------------------- |
 | New message  | Stored, if the chat is archived                                        |
-| Edited       | Notifies with old and new text; every version is appended to the chain |
+| Edited       | Notifies with the old text struck through above the new one            |
 | Deleted      | Notifies with the stored content, then drops the row                   |
 | Connection   | Notifies on connect and disconnect; purges data on disconnect          |
+
+A notification leads with the event and the chat, whose name links to the
+person's Telegram profile — `t.me/<username>` when they have one, otherwise
+`tg://user?id=<id>`. The id form only opens for users who have contacted the
+bot, so the id is also printed as text in the expanded view.
+
+Chat and message ids, the exact timestamp and the follow-up commands sit behind
+an **ℹ️ Batafsil** button, which expands the message in place and turns into
+**▲ Yashirish**. The button is attached when the notification fits one message;
+a longer one is sent expanded from the start.
 
 Notifications are sent before rows are deleted, so a failed send never loses
 data. Messages longer than Telegram's limits (4096 characters, 1024 for
@@ -143,11 +153,16 @@ In `DB_PATH`:
   `/chats` can offer them; no message content
 - `chat_rules` — your per-chat archiving decisions
 - `business_connections` — connection id, owner id, enabled flag
+- `notification_details` — the collapsed and expanded text of a sent
+  notification, so the expand button still works later
 
 Media is referenced by `file_id` and never downloaded. The database file is
 created with mode `600` and its directory with `700`.
 
 Rows older than `RETENTION_DAYS` are deleted on startup and hourly thereafter.
+`notification_details` keeps its own **7-day** limit, because it holds a copy of
+content that `messages` has already purged; it is also dropped by
+`/forget <chat_id>`.
 
 ## Development
 
