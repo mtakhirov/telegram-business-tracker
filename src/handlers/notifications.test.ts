@@ -232,12 +232,12 @@ describe("edited notifications", () => {
     });
 
     expect(body(calls[0]!)).toBe(
-      `✏️ <b>Tahrirlandi</b> — ${ALI_LINK}\n\n<s>salom qalaysan</s>\nsalom, qalaysan?`,
+      `✏️ <b>Tahrirlandi</b> — ${ALI_LINK}\n\n<s>salom qalaysan</s>\n\nsalom, qalaysan?`,
     );
     expect(expandedOf(calls[0]!)).toBe(
       `✏️ <b>Tahrirlandi</b> — ${ALI_LINK}\n` +
         `Chat 555 · msg 5001 · ${formatExactSeconds(editDate)}\n\n` +
-        `<s>salom qalaysan</s>\nsalom, qalaysan?\n\n` +
+        `<s>salom qalaysan</s>\n\nsalom, qalaysan?\n\n` +
         `/history 555\n/versions 555 5001`,
     );
   });

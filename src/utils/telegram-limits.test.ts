@@ -81,12 +81,12 @@ describe("packBlocks", () => {
 describe("diffBlocks", () => {
   test("strikes the old text above the new one", () => {
     expect(diffBlocks("salom qalaysan", "salom, qalaysan?")).toEqual([
-      "<s>salom qalaysan</s>\nsalom, qalaysan?",
+      "<s>salom qalaysan</s>\n\nsalom, qalaysan?",
     ]);
   });
 
   test("escapes both sides", () => {
-    expect(diffBlocks("<b>", "a & b")).toEqual(["<s>&lt;b&gt;</s>\na &amp; b"]);
+    expect(diffBlocks("<b>", "a & b")).toEqual(["<s>&lt;b&gt;</s>\n\na &amp; b"]);
   });
 
   test("returns the new content alone when there is no old text", () => {

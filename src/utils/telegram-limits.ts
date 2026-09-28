@@ -61,7 +61,7 @@ export function diffBlocks(
 ): string[] {
   if (!oldContent) return contentBlocks(newContent, limit);
 
-  const combined = `<s>${escapeHtml(oldContent)}</s>\n${escapeHtml(newContent)}`;
+  const combined = `<s>${escapeHtml(oldContent)}</s>\n\n${escapeHtml(newContent)}`;
   if (combined.length <= limit) return [combined];
 
   return [...struckBlocks(oldContent, limit), ...contentBlocks(newContent, limit)];
