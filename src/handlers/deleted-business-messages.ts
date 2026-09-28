@@ -2,7 +2,8 @@ import { Composer } from "grammy";
 import { ADMIN_CHAT_ID } from "../core/config.js";
 import { getMessage, deleteMessage, isOwnerConnection } from "../store/message-store.js";
 import { getUserDisplayName, formatDate, getContentDescription, getMediaInfo, escapeHtml } from "../utils/format.js";
-import { sendMedia } from "../utils/send-media.js";
+import { sendMediaWithBlocks } from "../utils/send-media.js";
+import { quote, sendBlocks } from "../utils/telegram-limits.js";
 
 const composer = new Composer();
 
@@ -23,7 +24,7 @@ composer.on("deleted_business_messages", async (ctx) => {
 
   // Classify without deleting yet. Rows are removed from the store only after
   // the notification for them has been sent, so a send failure never loses data.
-  const textParts: string[] = [];
+  const textBlocks: string[] = [];
   const textMsgIds: number[] = [];
   const mediaMsgs: { stored: NonNullable<ReturnType<typeof getMessage>>; media: NonNullable<ReturnType<typeof getMediaInfo>>; msgId: number }[] = [];
   const notFoundIds: number[] = [];
@@ -44,31 +45,29 @@ composer.on("deleted_business_messages", async (ctx) => {
       const content = stored.text || stored.caption || getContentDescription(stored);
       const date = formatDate(stored.date);
 
-      textParts.push(
+      const meta =
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `🆔 ID: <code>${msgId}</code>\n` +
         `👤 Kim: ${escapeHtml(user)}\n` +
         `📅 Yuborilgan: ${date}\n` +
-        `📝 Mazmuni:\n<blockquote>${escapeHtml(content)}</blockquote>`,
-      );
+        `📝 Mazmuni:`;
+      // Long content becomes several blockquote blocks; each stays under the limit.
+      textBlocks.push(meta, ...quote(content));
       textMsgIds.push(msgId);
     }
   }
 
-  // Send text-only and not-found messages as a single text message, then drop
-  // the rows only if that send succeeded.
-  if (textParts.length > 0 || notFoundIds.length > 0) {
-    let text = header + "\n\n";
-    text += textParts.join("\n\n");
-
-    for (const msgId of notFoundIds) {
-      text +=
-        `\n\n━━━━━━━━━━━━━━━━━━━━\n` +
+  // Send text-only and not-found messages first, then drop those rows only if
+  // the send succeeded. Long output is split across several messages.
+  if (textBlocks.length > 0 || notFoundIds.length > 0) {
+    const notFoundBlocks = notFoundIds.map(
+      (msgId) =>
+        `━━━━━━━━━━━━━━━━━━━━\n` +
         `🆔 ID: <code>${msgId}</code>\n` +
-        `⚠️ <i>Bu xabar botning xotirasida topilmadi</i>`;
-    }
+        `⚠️ <i>Bu xabar botning xotirasida topilmadi</i>`,
+    );
 
-    await ctx.api.sendMessage(ADMIN_CHAT_ID, text, { parse_mode: "HTML" });
+    await sendBlocks(ctx.api, ADMIN_CHAT_ID, [header, ...textBlocks, ...notFoundBlocks]);
     for (const msgId of textMsgIds) {
       deleteMessage(businessConnectionId, chat.id, msgId);
     }
@@ -80,7 +79,7 @@ composer.on("deleted_business_messages", async (ctx) => {
     const date = formatDate(stored.date);
     const content = stored.caption || stored.text || "";
 
-    let caption =
+    const mediaHeader =
       `🗑 <b>O'chirilgan xabar</b>\n\n` +
       `👤 Kim: ${escapeHtml(user)}\n` +
       `💬 Chat: ${escapeHtml(chatName)}\n` +
@@ -89,11 +88,7 @@ composer.on("deleted_business_messages", async (ctx) => {
       `[${media.label}]\n` +
       `━━━━━━━━━━━━━━━━━━━━`;
 
-    if (content) {
-      caption += `\n<blockquote>${escapeHtml(content)}</blockquote>`;
-    }
-
-    await sendMedia(ctx.api, ADMIN_CHAT_ID, media, caption);
+    await sendMediaWithBlocks(ctx.api, ADMIN_CHAT_ID, media, mediaHeader, quote(content));
     deleteMessage(businessConnectionId, chat.id, msgId);
   }
 });

@@ -2,7 +2,8 @@ import { Composer } from "grammy";
 import { ADMIN_CHAT_ID } from "../core/config.js";
 import { getMessage, storeMessage, isOwnerConnection } from "../store/message-store.js";
 import { getUserDisplayName, formatDate, getContentDescription, getMediaInfo, getMediaLabel, escapeHtml } from "../utils/format.js";
-import { sendMedia } from "../utils/send-media.js";
+import { sendMediaWithBlocks } from "../utils/send-media.js";
+import { quote, sendBlocks } from "../utils/telegram-limits.js";
 
 const composer = new Composer();
 
@@ -27,48 +28,39 @@ composer.on("edited_business_message", async (ctx) => {
     `📅 Asl vaqt: ${formatDate(editedMsg.date)}\n` +
     `📅 Tahrir vaqti: ${formatDate(editedMsg.edit_date!)}`;
 
-  // Check if the new message has media
   const newMedia = getMediaInfo(editedMsg);
-  // Check if original had media
-  const oldMedia = original ? getMediaInfo(original) : null;
 
   if (newMedia) {
-    // Media message — send media with caption
-    const mediaLabel = `[${newMedia.label}]`;
-    let caption = `${header}\n\n${mediaLabel}\n━━━━━━━━━━━━━━━━━━━━\n`;
+    const mediaHeader = `${header}\n\n[${newMedia.label}]\n━━━━━━━━━━━━━━━━━━━━`;
+    const bodyBlocks: string[] = [];
 
     if (original) {
       const oldContent = original.text || original.caption || "";
-      if (oldContent) {
-        caption += `<blockquote>${escapeHtml(oldContent)}</blockquote>\n`;
-      }
+      if (oldContent) bodyBlocks.push(...quote(oldContent));
     } else {
-      caption += `⚠️ <i>Asl xabar topilmadi</i>\n`;
+      bodyBlocks.push(`⚠️ <i>Asl xabar topilmadi</i>`);
     }
 
     const newContent = editedMsg.caption || editedMsg.text || "";
-    if (newContent) {
-      caption += `<blockquote>${escapeHtml(newContent)}</blockquote>`;
-    }
+    if (newContent) bodyBlocks.push(...quote(newContent));
 
-    await sendMedia(ctx.api, ADMIN_CHAT_ID, newMedia, caption);
+    await sendMediaWithBlocks(ctx.api, ADMIN_CHAT_ID, newMedia, mediaHeader, bodyBlocks);
   } else {
-    // Text-only message
-    let text = header + "\n\n";
+    const blocks: string[] = [header];
 
     if (original) {
       const oldContent = original.text || original.caption || "[media]";
       const oldLabel = getMediaLabel(original);
-      if (oldLabel) text += `${oldLabel}\n━━━━━━━━━━━━━━━━━━━━\n`;
-      text += `📝 <b>Eski matn:</b>\n<blockquote>${escapeHtml(oldContent)}</blockquote>\n\n`;
+      const eskiHeader = (oldLabel ? `${oldLabel}\n━━━━━━━━━━━━━━━━━━━━\n` : "") + `📝 <b>Eski matn:</b>`;
+      blocks.push(eskiHeader, ...quote(oldContent));
     } else {
-      text += `⚠️ <i>Asl xabar botning xotirasida topilmadi</i>\n\n`;
+      blocks.push(`⚠️ <i>Asl xabar botning xotirasida topilmadi</i>`);
     }
 
     const newContent = getContentDescription(editedMsg);
-    text += `📝 <b>Yangi matn:</b>\n<blockquote>${escapeHtml(newContent)}</blockquote>`;
+    blocks.push(`📝 <b>Yangi matn:</b>`, ...quote(newContent));
 
-    await ctx.api.sendMessage(ADMIN_CHAT_ID, text, { parse_mode: "HTML" });
+    await sendBlocks(ctx.api, ADMIN_CHAT_ID, blocks);
   }
 
   storeMessage(businessConnectionId, chatId, editedMsg);
