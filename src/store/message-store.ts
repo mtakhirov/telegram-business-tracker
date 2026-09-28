@@ -26,6 +26,7 @@ interface IncomingMessage {
   message_id: number;
   from?: User;
   date: number;
+  edit_date?: number;
   text?: string;
   caption?: string;
   photo?: unknown[];
@@ -115,6 +116,27 @@ db.exec(`
   )
 `);
 
+// Append-only edit chain. `messages` keeps only the latest state, so every
+// intermediate version lives here. chat_id and business_connection_id are
+// duplicated so retention and every delete path can reach these rows.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS message_versions (
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    key                    TEXT NOT NULL,
+    chat_id                INTEGER NOT NULL,
+    business_connection_id TEXT NOT NULL,
+    version                INTEGER NOT NULL,
+    text                   TEXT,
+    caption                TEXT,
+    edit_date              INTEGER,
+    stored_at              INTEGER NOT NULL
+  )
+`);
+db.exec("CREATE INDEX IF NOT EXISTS idx_versions_key ON message_versions (key, version)");
+db.exec("CREATE INDEX IF NOT EXISTS idx_versions_stored_at ON message_versions (stored_at)");
+db.exec("CREATE INDEX IF NOT EXISTS idx_versions_chat ON message_versions (chat_id)");
+db.exec("CREATE INDEX IF NOT EXISTS idx_versions_connection ON message_versions (business_connection_id)");
+
 const stmtGet = db.prepare("SELECT * FROM messages WHERE key = ?");
 const stmtInsert = db.prepare(`
   INSERT OR REPLACE INTO messages (key, message_id, chat_id, business_connection_id, from_json, date, text, caption, photo, video, document, sticker, voice, audio, animation, stored_at)
@@ -126,6 +148,9 @@ const stmtCount = db.prepare("SELECT COUNT(*) as count FROM messages");
 const stmtCleanup = db.prepare("DELETE FROM messages WHERE stored_at < ?");
 
 const stmtGetConnection = db.prepare("SELECT * FROM business_connections WHERE id = ?");
+const stmtOwnerConnection = db.prepare(
+  "SELECT id FROM business_connections WHERE user_id = ? AND is_enabled = 1 ORDER BY updated_at DESC LIMIT 1",
+);
 const stmtUpsertConnection = db.prepare(`
   INSERT OR REPLACE INTO business_connections (id, user_id, is_enabled, updated_at)
   VALUES (?, ?, ?, ?)
@@ -147,6 +172,21 @@ const stmtSetChatRule = db.prepare(`
 `);
 const stmtDeleteChatRule = db.prepare("DELETE FROM chat_rules WHERE chat_id = ?");
 const stmtDeleteMessagesByChat = db.prepare("DELETE FROM messages WHERE chat_id = ?");
+
+const stmtLatestVersion = db.prepare(
+  "SELECT version, text, caption FROM message_versions WHERE key = ? ORDER BY version DESC LIMIT 1",
+);
+const stmtInsertVersion = db.prepare(`
+  INSERT INTO message_versions (key, chat_id, business_connection_id, version, text, caption, edit_date, stored_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`);
+const stmtListVersions = db.prepare(
+  "SELECT version, text, caption, edit_date, stored_at FROM message_versions WHERE key = ? ORDER BY version ASC",
+);
+const stmtDeleteVersionsByKey = db.prepare("DELETE FROM message_versions WHERE key = ?");
+const stmtDeleteVersionsByChat = db.prepare("DELETE FROM message_versions WHERE chat_id = ?");
+const stmtDeleteVersionsByConnection = db.prepare("DELETE FROM message_versions WHERE business_connection_id = ?");
+const stmtCleanupVersions = db.prepare("DELETE FROM message_versions WHERE stored_at < ?");
 
 function getKey(businessConnectionId: string, chatId: number, messageId: number): string {
   return `${businessConnectionId}:${chatId}:${messageId}`;
@@ -181,9 +221,43 @@ export function getMessage(businessConnectionId: string, chatId: number, message
   return row ? rowToStoredMessage(row) : undefined;
 }
 
+/**
+ * Appends a new row to the edit chain, unless the text and caption are
+ * unchanged from the latest version.
+ */
+function appendVersion(
+  key: string,
+  businessConnectionId: string,
+  chatId: number,
+  message: IncomingMessage,
+  now: number,
+): void {
+  const text = message.text || null;
+  const caption = message.caption || null;
+  const latest = stmtLatestVersion.get(key) as
+    | { version: number; text: string | null; caption: string | null }
+    | undefined;
+
+  if (latest && latest.text === text && latest.caption === caption) return;
+
+  stmtInsertVersion.run(
+    key,
+    chatId,
+    businessConnectionId,
+    (latest?.version ?? 0) + 1,
+    text,
+    caption,
+    message.edit_date ?? null,
+    now,
+  );
+}
+
 export function storeMessage(businessConnectionId: string, chatId: number, message: IncomingMessage): void {
+  const key = getKey(businessConnectionId, chatId, message.message_id);
+  const now = Date.now();
+
   stmtInsert.run(
-    getKey(businessConnectionId, chatId, message.message_id),
+    key,
     message.message_id,
     chatId,
     businessConnectionId,
@@ -198,21 +272,28 @@ export function storeMessage(businessConnectionId: string, chatId: number, messa
     toJson(message.voice),
     toJson(message.audio),
     toJson(message.animation),
-    Date.now(),
+    now,
   );
+
+  appendVersion(key, businessConnectionId, chatId, message, now);
 }
 
 export function deleteMessage(businessConnectionId: string, chatId: number, messageId: number): void {
-  stmtDelete.run(getKey(businessConnectionId, chatId, messageId));
+  const key = getKey(businessConnectionId, chatId, messageId);
+  stmtDelete.run(key);
+  stmtDeleteVersionsByKey.run(key);
 }
 
 export function deleteMessagesByConnection(businessConnectionId: string): number {
+  stmtDeleteVersionsByConnection.run(businessConnectionId);
   return stmtDeleteByConnection.run(businessConnectionId).changes;
 }
 
 /** Deletes messages stored more than `retentionMs` ago. Returns the number of deleted rows. */
 export function cleanupOldMessages(retentionMs: number): number {
-  return stmtCleanup.run(Date.now() - retentionMs).changes;
+  const cutoff = Date.now() - retentionMs;
+  stmtCleanupVersions.run(cutoff);
+  return stmtCleanup.run(cutoff).changes;
 }
 
 export function getStoreSize(): number {
@@ -237,6 +318,12 @@ export function saveConnection(conn: StoredConnection): void {
 export function isOwnerConnection(id: string): boolean {
   const conn = getConnection(id);
   return !!conn && conn.userId === OWNER_ID && conn.isEnabled;
+}
+
+/** The owner's active business connection, if the bot is currently connected. */
+export function getOwnerConnectionId(): string | undefined {
+  const row = stmtOwnerConnection.get(OWNER_ID) as { id: string } | undefined;
+  return row?.id;
 }
 
 export type TrackMode = "allow" | "deny";
@@ -279,7 +366,28 @@ export function clearChatRule(chatId: number): void {
 
 /** Drop every stored message for one chat. Returns the number of deleted rows. */
 export function deleteMessagesByChat(chatId: number): number {
+  stmtDeleteVersionsByChat.run(chatId);
   return stmtDeleteMessagesByChat.run(chatId).changes;
+}
+
+export interface MessageVersion {
+  version: number;
+  text: string | null;
+  caption: string | null;
+  editDate: number | null;
+  storedAt: Date;
+}
+
+/** Full edit chain for one message, oldest version first. */
+export function getVersions(businessConnectionId: string, chatId: number, messageId: number): MessageVersion[] {
+  const rows = stmtListVersions.all(getKey(businessConnectionId, chatId, messageId)) as Record<string, unknown>[];
+  return rows.map((row) => ({
+    version: row.version as number,
+    text: (row.text as string) || null,
+    caption: (row.caption as string) || null,
+    editDate: (row.edit_date as number) ?? null,
+    storedAt: new Date(row.stored_at as number),
+  }));
 }
 
 export function closeStore(): void {
