@@ -4,6 +4,7 @@ import stats from "./stats/index.js";
 import chats from "./chats/index.js";
 import versions from "./versions/index.js";
 import search from "./search/index.js";
+import exportCmd from "./export/index.js";
 
 const composer = new Composer();
 composer.use(start);
@@ -11,5 +12,6 @@ composer.use(stats);
 composer.use(chats);
 composer.use(versions);
 composer.use(search);
+composer.use(exportCmd);
 
 export default composer;
