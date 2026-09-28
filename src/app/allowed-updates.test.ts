@@ -26,15 +26,15 @@ const appDir = path.dirname(new URL(import.meta.url).pathname);
 const featuresDir = path.join(appDir, "..", "features");
 
 let allowed: readonly string[];
-let closeStore: () => void;
+let closeDb: () => void;
 
 beforeAll(async () => {
   allowed = (await import("./handlers.js")).ALLOWED_UPDATES;
-  closeStore = (await import("../entities/archive.js")).closeStore;
+  closeDb = (await import("../shared/db/client.js")).closeDb;
 });
 
 afterAll(() => {
-  closeStore();
+  closeDb();
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 

@@ -24,7 +24,7 @@
 import type { Api } from "grammy";
 import type { InlineKeyboardMarkup } from "grammy/types";
 import type { MediaInfo } from "../../shared/lib/format.js";
-import { saveNotificationDetails } from "../archive.js";
+import { saveNotificationDetails } from "./repository.js";
 import { sendMedia, sendMediaWithBlocks } from "../../shared/telegram/send-media.js";
 import {
   MAX_CAPTION_LENGTH,

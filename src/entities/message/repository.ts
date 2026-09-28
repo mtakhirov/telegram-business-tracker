@@ -1,40 +1,34 @@
 /**
- * The archive: every query and retention rule the bot runs.
+ * Archived messages and their edit chains.
  *
- * Tables are declared in `./schema.ts`; this module is the only place that
- * reads or writes them, so the rest of the bot works with plain objects and
- * never with rows.
+ * `messages` holds the latest state of each message; because a row is
+ * overwritten in place on every edit, `message_versions` keeps the append-only
+ * chain that would otherwise be lost. A version is only appended when the text
+ * or caption actually changed, so a repeated update does not inflate the chain.
  *
- * Media and the sender are kept as JSON text because Telegram's shapes are
- * large, nested and only ever read back whole. Content columns that are
- * searched — `text` and `caption` — stay as real columns.
+ * Media and the sender are stored as JSON text because Telegram's shapes are
+ * large, nested and only ever read back whole. The columns that are searched —
+ * `text` and `caption` — stay as real columns, and a search escapes LIKE
+ * wildcards so a query for `%` matches a literal percent sign.
  *
- * Every delete path reaches all of the tables that hold content: removing one
- * message, one chat, one connection, or a retention sweep each drop the
- * matching edit chain, and a chat also drops its notification details.
+ * Deleting a message always drops its versions with it. Deleting a whole chat
+ * or connection does the same, which is why both ids are duplicated onto the
+ * version rows.
  *
  * @example
  * ```ts
  * storeMessage(connectionId, chatId, message);
- * getVersions(connectionId, chatId, messageId); // [v1, v2, v3]
+ * storeMessage(connectionId, chatId, { ...message, text: "edited" });
  *
- * cleanupOldMessages(30 * 24 * 60 * 60 * 1000);
+ * getVersions(connectionId, chatId, message.message_id);
+ * // [{ version: 1, text: "original" }, { version: 2, text: "edited" }]
  * ```
  */
 
-import { randomBytes } from "node:crypto";
-import { and, asc, desc, eq, lt, sql } from "drizzle-orm";
+import { asc, desc, eq, lt, sql } from "drizzle-orm";
 import type { User } from "grammy/types";
-import { DEFAULT_TRACK_MODE, OWNER_ID } from "../shared/config/index.js";
-import { closeDb, db } from "../shared/db/client.js";
-import {
-  businessConnections,
-  chatRules,
-  chats,
-  messageVersions,
-  messages,
-  notificationDetails,
-} from "../shared/db/schema.js";
+import { db } from "../../shared/db/client.js";
+import { messageVersions, messages } from "../../shared/db/schema.js";
 
 export interface StoredMessage {
   messageId: number;
@@ -54,7 +48,7 @@ export interface StoredMessage {
   storedAt: Date;
 }
 
-interface IncomingMessage {
+export interface IncomingMessage {
   message_id: number;
   from?: User;
   date: number;
@@ -70,21 +64,6 @@ interface IncomingMessage {
   animation?: unknown;
 }
 
-export interface StoredConnection {
-  id: string;
-  userId: number;
-  isEnabled: boolean;
-}
-
-export type TrackMode = "allow" | "deny";
-
-export interface KnownChat {
-  chatId: number;
-  title: string | null;
-  lastSeen: Date;
-  mode: TrackMode | null;
-}
-
 export interface MessageVersion {
   version: number;
   text: string | null;
@@ -95,11 +74,6 @@ export interface MessageVersion {
 
 export interface ExportedMessage extends StoredMessage {
   versions: MessageVersion[];
-}
-
-export interface NotificationDetails {
-  compact: string;
-  expanded: string;
 }
 
 type MessageRow = typeof messages.$inferSelect;
@@ -206,42 +180,24 @@ export function storeMessage(businessConnectionId: string, chatId: number, messa
   const key = getKey(businessConnectionId, chatId, message.message_id);
   const now = Date.now();
 
+  const content = {
+    fromJson: toJson(message.from),
+    date: message.date,
+    text: message.text || null,
+    caption: message.caption || null,
+    photo: toJson(message.photo),
+    video: toJson(message.video),
+    document: toJson(message.document),
+    sticker: toJson(message.sticker),
+    voice: toJson(message.voice),
+    audio: toJson(message.audio),
+    animation: toJson(message.animation),
+    storedAt: now,
+  };
+
   db.insert(messages)
-    .values({
-      key,
-      messageId: message.message_id,
-      chatId,
-      businessConnectionId,
-      fromJson: toJson(message.from),
-      date: message.date,
-      text: message.text || null,
-      caption: message.caption || null,
-      photo: toJson(message.photo),
-      video: toJson(message.video),
-      document: toJson(message.document),
-      sticker: toJson(message.sticker),
-      voice: toJson(message.voice),
-      audio: toJson(message.audio),
-      animation: toJson(message.animation),
-      storedAt: now,
-    })
-    .onConflictDoUpdate({
-      target: messages.key,
-      set: {
-        fromJson: toJson(message.from),
-        date: message.date,
-        text: message.text || null,
-        caption: message.caption || null,
-        photo: toJson(message.photo),
-        video: toJson(message.video),
-        document: toJson(message.document),
-        sticker: toJson(message.sticker),
-        voice: toJson(message.voice),
-        audio: toJson(message.audio),
-        animation: toJson(message.animation),
-        storedAt: now,
-      },
-    })
+    .values({ key, messageId: message.message_id, chatId, businessConnectionId, ...content })
+    .onConflictDoUpdate({ target: messages.key, set: content })
     .run();
 
   appendVersion(key, businessConnectionId, chatId, message, now);
@@ -264,7 +220,6 @@ export function deleteMessagesByConnection(businessConnectionId: string): number
 
 export function deleteMessagesByChat(chatId: number): number {
   db.delete(messageVersions).where(eq(messageVersions.chatId, chatId)).run();
-  db.delete(notificationDetails).where(eq(notificationDetails.chatId, chatId)).run();
   return db.delete(messages).where(eq(messages.chatId, chatId)).returning({ key: messages.key }).all().length;
 }
 
@@ -308,6 +263,20 @@ export function listChatMessages(chatId: number, limit: number): StoredMessage[]
     .map(toStoredMessage);
 }
 
+export function getVersions(
+  businessConnectionId: string,
+  chatId: number,
+  messageId: number,
+): MessageVersion[] {
+  return db
+    .select()
+    .from(messageVersions)
+    .where(eq(messageVersions.key, getKey(businessConnectionId, chatId, messageId)))
+    .orderBy(asc(messageVersions.version))
+    .all()
+    .map(toMessageVersion);
+}
+
 export function exportMessages(chatId?: number): ExportedMessage[] {
   const messageRows =
     chatId === undefined
@@ -342,123 +311,4 @@ export function exportMessages(chatId?: number): ExportedMessage[] {
     exported.push(Object.assign(message, { versions: versionsByKey.get(key) ?? [] }));
   }
   return exported;
-}
-
-export function getVersions(
-  businessConnectionId: string,
-  chatId: number,
-  messageId: number,
-): MessageVersion[] {
-  return db
-    .select()
-    .from(messageVersions)
-    .where(eq(messageVersions.key, getKey(businessConnectionId, chatId, messageId)))
-    .orderBy(asc(messageVersions.version))
-    .all()
-    .map(toMessageVersion);
-}
-
-export function getConnection(id: string): StoredConnection | undefined {
-  const row = db.select().from(businessConnections).where(eq(businessConnections.id, id)).get();
-  return row ? { id: row.id, userId: row.userId, isEnabled: row.isEnabled } : undefined;
-}
-
-export function saveConnection(conn: StoredConnection): void {
-  db.insert(businessConnections)
-    .values({ id: conn.id, userId: conn.userId, isEnabled: conn.isEnabled, updatedAt: Date.now() })
-    .onConflictDoUpdate({
-      target: businessConnections.id,
-      set: { userId: conn.userId, isEnabled: conn.isEnabled, updatedAt: Date.now() },
-    })
-    .run();
-}
-
-export function isOwnerConnection(id: string): boolean {
-  const conn = getConnection(id);
-  return !!conn && conn.userId === OWNER_ID && conn.isEnabled;
-}
-
-export function getOwnerConnectionId(): string | undefined {
-  const row = db
-    .select({ id: businessConnections.id })
-    .from(businessConnections)
-    .where(and(eq(businessConnections.userId, OWNER_ID), eq(businessConnections.isEnabled, true)))
-    .orderBy(desc(businessConnections.updatedAt))
-    .limit(1)
-    .get();
-  return row?.id;
-}
-
-export function touchChat(chatId: number, title: string | null): void {
-  const lastSeen = Date.now();
-  db.insert(chats)
-    .values({ chatId, title, lastSeen })
-    .onConflictDoUpdate({ target: chats.chatId, set: { title, lastSeen } })
-    .run();
-}
-
-export function isChatTracked(chatId: number): boolean {
-  const row = db.select({ mode: chatRules.mode }).from(chatRules).where(eq(chatRules.chatId, chatId)).get();
-  return (row?.mode ?? DEFAULT_TRACK_MODE) === "allow";
-}
-
-export function listChats(): KnownChat[] {
-  return db
-    .select({
-      chatId: chats.chatId,
-      title: chats.title,
-      lastSeen: chats.lastSeen,
-      mode: chatRules.mode,
-    })
-    .from(chats)
-    .leftJoin(chatRules, eq(chatRules.chatId, chats.chatId))
-    .orderBy(desc(chats.lastSeen))
-    .all()
-    .map((row) => ({
-      chatId: row.chatId,
-      title: row.title,
-      lastSeen: new Date(row.lastSeen),
-      mode: row.mode,
-    }));
-}
-
-export function setChatRule(chatId: number, mode: TrackMode): void {
-  const updatedAt = Date.now();
-  db.insert(chatRules)
-    .values({ chatId, mode, updatedAt })
-    .onConflictDoUpdate({ target: chatRules.chatId, set: { mode, updatedAt } })
-    .run();
-}
-
-export function clearChatRule(chatId: number): void {
-  db.delete(chatRules).where(eq(chatRules.chatId, chatId)).run();
-}
-
-export function saveNotificationDetails(chatId: number, details: NotificationDetails): string {
-  const token = randomBytes(8).toString("hex");
-  db.insert(notificationDetails)
-    .values({ token, chatId, compact: details.compact, expanded: details.expanded, createdAt: Date.now() })
-    .run();
-  return token;
-}
-
-export function getNotificationDetails(token: string): NotificationDetails | undefined {
-  const row = db
-    .select({ compact: notificationDetails.compact, expanded: notificationDetails.expanded })
-    .from(notificationDetails)
-    .where(eq(notificationDetails.token, token))
-    .get();
-  return row ? { compact: row.compact, expanded: row.expanded } : undefined;
-}
-
-export function cleanupNotificationDetails(ttlMs: number): number {
-  return db
-    .delete(notificationDetails)
-    .where(lt(notificationDetails.createdAt, Date.now() - ttlMs))
-    .returning({ token: notificationDetails.token })
-    .all().length;
-}
-
-export function closeStore(): void {
-  closeDb();
 }

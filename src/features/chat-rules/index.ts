@@ -21,7 +21,9 @@
 
 import { Composer, type CommandContext, type Context } from "grammy";
 import { DEFAULT_TRACK_MODE, OWNER_ID } from "../../shared/config/index.js";
-import { clearChatRule, deleteMessagesByChat, listChats, setChatRule } from "../../entities/archive.js";
+import { clearChatRule, listChats, setChatRule } from "../../entities/chat/repository.js";
+import { deleteNotificationDetailsByChat } from "../../entities/notification/repository.js";
+import { deleteMessagesByChat } from "../../entities/message/repository.js";
 import { escapeHtml } from "../../shared/lib/format.js";
 import { metaLine, userLink } from "../../shared/telegram/notify-format.js";
 import { sendBlocks } from "../../shared/telegram/limits.js";
@@ -104,6 +106,7 @@ composer.command("forget", async (ctx) => {
   if (chatId === null) return usage(ctx, "forget");
 
   const removed = deleteMessagesByChat(chatId);
+  deleteNotificationDetailsByChat(chatId);
   await ctx.reply(`🧹 ${chatId} — ${removed} yozuv o'chirildi (qaytarilmaydi)`);
 });
 

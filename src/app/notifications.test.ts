@@ -27,7 +27,11 @@ const CONN = "conn-1";
 const CHAT = 555;
 const GROUP = -1001234;
 
-let store: typeof import("../entities/archive.js");
+let store: typeof import("../entities/message/repository.js") &
+  typeof import("../entities/chat/repository.js") &
+  typeof import("../entities/connection/repository.js") &
+  typeof import("../entities/notification/repository.js");
+let closeDb: () => void;
 let formatExactSeconds: (typeof import("../shared/lib/format.js"))["formatExactSeconds"];
 let formatWhenSeconds: (typeof import("../shared/lib/format.js"))["formatWhenSeconds"];
 let handlers: Record<
@@ -77,7 +81,12 @@ function token(call: Call): string {
 const expandedOf = (call: Call) => store.getNotificationDetails(token(call))!.expanded;
 
 beforeAll(async () => {
-  store = await import("../entities/archive.js");
+  store = {
+    ...(await import("../entities/message/repository.js")),
+    ...(await import("../entities/chat/repository.js")),
+    ...(await import("../entities/connection/repository.js")),
+    ...(await import("../entities/notification/repository.js")),
+  };
   const format = await import("../shared/lib/format.js");
   formatExactSeconds = format.formatExactSeconds;
   formatWhenSeconds = format.formatWhenSeconds;
@@ -87,11 +96,13 @@ beforeAll(async () => {
     connection: (await import("../features/notify-connection/index.js")).default,
   } as typeof handlers;
 
+  closeDb = (await import("../shared/db/client.js")).closeDb;
+
   store.saveConnection({ id: CONN, userId: ADMIN, isEnabled: true });
 });
 
 afterAll(() => {
-  store.closeStore();
+  closeDb();
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
@@ -289,7 +300,7 @@ describe("notification details", () => {
     expect(store.getNotificationDetails(id)).toBeUndefined();
   });
 
-  test("are purged along with a chat", async () => {
+  test("are dropped when a chat is forgotten", async () => {
     const date = recently();
     store.storeMessage(CONN, 7777, { message_id: 7001, date, from: counterparty, text: "tozalanadi" });
     const calls = await run("deleted", {
@@ -302,7 +313,11 @@ describe("notification details", () => {
     const id = token(calls[0]!);
 
     expect(store.getNotificationDetails(id)).toBeDefined();
+
     store.deleteMessagesByChat(7777);
+    store.deleteNotificationDetailsByChat(7777);
+
+    expect(store.getMessage(CONN, 7777, 7001)).toBeUndefined();
     expect(store.getNotificationDetails(id)).toBeUndefined();
   });
 });

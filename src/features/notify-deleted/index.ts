@@ -14,7 +14,9 @@
 
 import { Composer } from "grammy";
 import { ADMIN_CHAT_ID } from "../../shared/config/index.js";
-import { getMessage, deleteMessage, isOwnerConnection, isChatTracked } from "../../entities/archive.js";
+import { isChatTracked } from "../../entities/chat/repository.js";
+import { isOwnerConnection } from "../../entities/connection/repository.js";
+import { getMessage, deleteMessage } from "../../entities/message/repository.js";
 import {
   getUserDisplayName,
   formatExactSeconds,

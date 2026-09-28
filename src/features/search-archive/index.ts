@@ -15,7 +15,7 @@
 
 import { Composer } from "grammy";
 import { OWNER_ID } from "../../shared/config/index.js";
-import { listChatMessages, searchMessages, type StoredMessage } from "../../entities/archive.js";
+import { listChatMessages, searchMessages, type StoredMessage } from "../../entities/message/repository.js";
 import { escapeHtml, formatWhenSeconds, getMediaInfo, getUserDisplayName } from "../../shared/lib/format.js";
 import { metaLine, userLink, withMeta } from "../../shared/telegram/notify-format.js";
 import { contentBlocks, sendBlocks } from "../../shared/telegram/limits.js";

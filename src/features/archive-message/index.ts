@@ -7,7 +7,9 @@
  */
 
 import { Composer } from "grammy";
-import { storeMessage, isOwnerConnection, isChatTracked, touchChat } from "../../entities/archive.js";
+import { isChatTracked, touchChat } from "../../entities/chat/repository.js";
+import { isOwnerConnection } from "../../entities/connection/repository.js";
+import { storeMessage } from "../../entities/message/repository.js";
 
 const composer = new Composer();
 

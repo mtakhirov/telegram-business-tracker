@@ -6,7 +6,7 @@
  */
 
 import { Composer } from "grammy";
-import { getStoreSize } from "../../entities/archive.js";
+import { getStoreSize } from "../../entities/message/repository.js";
 import { OWNER_ID, RETENTION_DAYS } from "../../shared/config/index.js";
 import { formatWhen } from "../../shared/lib/format.js";
 

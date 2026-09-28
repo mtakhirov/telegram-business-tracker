@@ -15,7 +15,8 @@ import { Composer } from "grammy";
 import { ADMIN_CHAT_ID, OWNER_ID } from "../../shared/config/index.js";
 import { getUserDisplayName } from "../../shared/lib/format.js";
 import { eventHeader, metaLine, userLink } from "../../shared/telegram/notify-format.js";
-import { saveConnection, deleteMessagesByConnection } from "../../entities/archive.js";
+import { saveConnection } from "../../entities/connection/repository.js";
+import { deleteMessagesByConnection } from "../../entities/message/repository.js";
 
 const composer = new Composer();
 

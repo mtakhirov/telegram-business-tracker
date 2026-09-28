@@ -18,15 +18,24 @@ process.env.OWNER_ID = "123";
 process.env.DEFAULT_TRACK_MODE = "allow";
 process.env.DB_PATH = path.join(tmpDir, "test.db");
 
-type Store = typeof import("./archive.js");
-let store: Store;
+let store: typeof import("./message/repository.js") &
+  typeof import("./chat/repository.js") &
+  typeof import("./connection/repository.js") &
+  typeof import("./notification/repository.js");
+let closeDb: () => void;
 
 beforeAll(async () => {
-  store = await import("./archive.js");
+  store = {
+    ...(await import("./message/repository.js")),
+    ...(await import("./chat/repository.js")),
+    ...(await import("./connection/repository.js")),
+    ...(await import("./notification/repository.js")),
+  };
+  closeDb = (await import("../shared/db/client.js")).closeDb;
 });
 
 afterAll(() => {
-  store.closeStore();
+  closeDb();
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 

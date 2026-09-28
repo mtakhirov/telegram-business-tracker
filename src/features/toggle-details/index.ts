@@ -12,7 +12,7 @@
 
 import { Composer, GrammyError } from "grammy";
 import { OWNER_ID } from "../../shared/config/index.js";
-import { getNotificationDetails } from "../../entities/archive.js";
+import { getNotificationDetails } from "../../entities/notification/repository.js";
 import { TOGGLE_PATTERN, collapseKeyboard, expandKeyboard } from "../../entities/notification/send.js";
 
 const composer = new Composer();

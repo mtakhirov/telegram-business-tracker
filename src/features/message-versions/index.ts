@@ -12,7 +12,8 @@
 
 import { Composer } from "grammy";
 import { OWNER_ID } from "../../shared/config/index.js";
-import { getOwnerConnectionId, getVersions } from "../../entities/archive.js";
+import { getOwnerConnectionId } from "../../entities/connection/repository.js";
+import { getVersions } from "../../entities/message/repository.js";
 import { formatWhen, formatWhenSeconds } from "../../shared/lib/format.js";
 import { metaLine, withMeta } from "../../shared/telegram/notify-format.js";
 import { contentBlocks, sendBlocks } from "../../shared/telegram/limits.js";

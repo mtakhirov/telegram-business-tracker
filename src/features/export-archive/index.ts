@@ -15,7 +15,7 @@
 
 import { Composer, InputFile } from "grammy";
 import { BOT_NAME, OWNER_ID } from "../../shared/config/index.js";
-import { exportMessages } from "../../entities/archive.js";
+import { exportMessages } from "../../entities/message/repository.js";
 import { getMediaInfo } from "../../shared/lib/format.js";
 
 const composer = new Composer();

@@ -18,7 +18,9 @@
 import { bot } from "./bot.js";
 import commands from "./commands.js";
 import handlers, { ALLOWED_UPDATES } from "./handlers.js";
-import { cleanupNotificationDetails, cleanupOldMessages, closeStore } from "../entities/archive.js";
+import { cleanupOldMessages } from "../entities/message/repository.js";
+import { cleanupNotificationDetails } from "../entities/notification/repository.js";
+import { closeDb } from "../shared/db/client.js";
 import { COMMANDS } from "../shared/telegram/command-list.js";
 import { OWNER_ID, RETENTION_DAYS } from "../shared/config/index.js";
 
@@ -55,7 +57,7 @@ async function shutdown(signal: string): Promise<void> {
   console.log(`\n${signal} qabul qilindi, to'xtatilmoqda...`);
   clearInterval(cleanupTimer);
   await bot.stop();
-  closeStore();
+  closeDb();
   process.exit(0);
 }
 

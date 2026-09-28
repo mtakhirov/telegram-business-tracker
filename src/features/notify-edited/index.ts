@@ -8,7 +8,9 @@
 
 import { Composer } from "grammy";
 import { ADMIN_CHAT_ID } from "../../shared/config/index.js";
-import { getMessage, storeMessage, isOwnerConnection, isChatTracked } from "../../entities/archive.js";
+import { isChatTracked } from "../../entities/chat/repository.js";
+import { isOwnerConnection } from "../../entities/connection/repository.js";
+import { getMessage, storeMessage } from "../../entities/message/repository.js";
 import { getUserDisplayName, formatExactSeconds, getMediaInfo } from "../../shared/lib/format.js";
 import {
   chatSubject,

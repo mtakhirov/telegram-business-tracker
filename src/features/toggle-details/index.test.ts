@@ -20,7 +20,8 @@ process.env.ADMIN_CHAT_ID = String(ADMIN);
 process.env.OWNER_ID = String(ADMIN);
 process.env.DB_PATH = path.join(tmpDir, "toggle.db");
 
-let store: typeof import("../../entities/archive.js");
+let store: typeof import("../../entities/notification/repository.js");
+let closeDb: () => void;
 let toggle: { middleware: () => (ctx: Context, next: () => Promise<void>) => Promise<void> };
 
 const me = { id: 1, is_bot: true, first_name: "bot", username: "testbot" } as UserFromGetMe;
@@ -70,12 +71,13 @@ const buttonText = (call: Call) =>
   (call.payload.reply_markup as InlineKeyboardMarkup).inline_keyboard[0]![0]!.text;
 
 beforeAll(async () => {
-  store = await import("../../entities/archive.js");
+  store = await import("../../entities/notification/repository.js");
+  closeDb = (await import("../../shared/db/client.js")).closeDb;
   toggle = (await import("./index.js")).default;
 });
 
 afterAll(() => {
-  store.closeStore();
+  closeDb();
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
