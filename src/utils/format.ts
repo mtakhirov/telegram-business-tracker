@@ -1,3 +1,30 @@
+/**
+ * Rendering primitives shared by every notification and command reply.
+ *
+ * Three concerns live here: naming a person, naming a moment, and naming a
+ * message's media. Timestamps are always resolved in Asia/Tashkent, which has
+ * no DST, so comparing calendar days by shifting 24 hours is exact. Media is
+ * described by a plain lowercase word rather than an emoji, and any file name
+ * or title it embeds is HTML-escaped at the source.
+ *
+ * @example Naming a moment
+ * ```ts
+ * formatWhen(sentToday);      // "14:32"
+ * formatWhen(sentYesterday);  // "kecha 14:32"
+ * formatWhen(sentLastMonth);  // "20.09 14:32"
+ * formatExact(sentLastMonth); // "20.09.2026 14:32:11"
+ * ```
+ *
+ * @example Naming media
+ * ```ts
+ * getMediaInfo({ photo: [{ file_id: "A" }, { file_id: "B" }] });
+ * // { type: "photo", fileId: "B", word: "rasm" }
+ *
+ * getMediaInfo({ document: { file_id: "D", file_name: "hisobot.pdf" } });
+ * // { type: "document", fileId: "D", word: "fayl: hisobot.pdf" }
+ * ```
+ */
+
 import type { User } from "grammy/types";
 
 export function getUserDisplayName(user?: User): string {
@@ -11,7 +38,6 @@ export function getUserDisplayName(user?: User): string {
 const TIME_ZONE = "Asia/Tashkent";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// en-GB keeps the parts numeric and ASCII, whatever the host locale is.
 const zoneFormatter = new Intl.DateTimeFormat("en-GB", {
   timeZone: TIME_ZONE,
   year: "numeric",
@@ -34,13 +60,6 @@ function zoneParts(date: Date): Record<string, string> {
   return parts;
 }
 
-/**
- * Short timestamp relative to `now`: time only for today, "kecha HH:MM" for
- * yesterday, "DD.MM HH:MM" within the year, "DD.MM.YY HH:MM" before that.
- *
- * Day boundaries are compared in Asia/Tashkent, which has no DST, so shifting
- * by 24 h to find yesterday is exact.
- */
 export function formatWhen(date: Date, now: Date = new Date()): string {
   const target = zoneParts(date);
   const today = zoneParts(now);
@@ -52,7 +71,6 @@ export function formatWhen(date: Date, now: Date = new Date()): string {
   return `${target.day}.${target.month}.${target.year!.slice(-2)} ${time}`;
 }
 
-/** `formatWhen` for a Telegram timestamp, which is in seconds. */
 export function formatWhenSeconds(timestamp: number, now?: Date): string {
   return formatWhen(new Date(timestamp * 1000), now);
 }
@@ -68,14 +86,12 @@ const exactFormatter = new Intl.DateTimeFormat("en-GB", {
   hourCycle: "h23",
 });
 
-/** Unambiguous timestamp for the expanded view: "28.09.2026 14:32:11". */
 export function formatExact(date: Date): string {
   const p = zoneParts(date);
   const seconds = exactFormatter.formatToParts(date).find((part) => part.type === "second")!.value;
   return `${p.day}.${p.month}.${p.year} ${p.hour}:${p.minute}:${seconds}`;
 }
 
-/** `formatExact` for a Telegram timestamp, which is in seconds. */
 export function formatExactSeconds(timestamp: number): string {
   return formatExact(new Date(timestamp * 1000));
 }
@@ -102,14 +118,9 @@ export type MediaType = "photo" | "video" | "document" | "voice" | "audio" | "an
 export interface MediaInfo {
   type: MediaType;
   fileId: string;
-  /**
-   * Plain lowercase type word for a meta line, e.g. "rasm", "fayl: hisobot.pdf".
-   * Already HTML-escaped where it embeds a file name or title.
-   */
   word: string;
 }
 
-/** "fayl" alone, or "fayl: hisobot.pdf" when a name is available. */
 function mediaWord(kind: string, detail?: string): string {
   const trimmed = detail?.trim();
   return trimmed ? `${kind}: ${escapeHtml(trimmed)}` : kind;

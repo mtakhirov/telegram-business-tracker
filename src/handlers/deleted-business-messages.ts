@@ -1,3 +1,17 @@
+/**
+ * Notifying about messages the other side deleted.
+ *
+ * Rows leave the archive only after the notification carrying them has been
+ * sent, so a failed send keeps the content rather than losing it for good.
+ * Text messages are batched into one notification and media is sent
+ * individually, because each media message needs its own upload.
+ *
+ * In a private chat the chat id equals the counterparty's user id, so a sender
+ * whose id differs is the owner: that is how a message the owner deleted is
+ * told apart from one the other side deleted, in a private chat and in a group
+ * alike.
+ */
+
 import { Composer } from "grammy";
 import { ADMIN_CHAT_ID } from "../core/config.js";
 import { getMessage, deleteMessage, isOwnerConnection, isChatTracked } from "../store/message-store.js";
@@ -29,13 +43,9 @@ composer.on("deleted_business_messages", async (ctx) => {
   const subject = chatSubject(chat);
   const single = messageIds.length === 1;
 
-  // In a private chat the chat id equals the counterparty's user id, so a
-  // different sender id means the message was the owner's own.
   const senderOf = (from?: Parameters<typeof getUserDisplayName>[0]) =>
     from && from.id !== chat.id ? userLink(from, getUserDisplayName(from)) : null;
 
-  // Classify without deleting yet. Rows are removed from the store only after
-  // the notification for them has been sent, so a send failure never loses data.
   const entries: TextEntry[] = [];
   const mediaMsgs: {
     stored: NonNullable<ReturnType<typeof getMessage>>;
@@ -66,8 +76,6 @@ composer.on("deleted_business_messages", async (ctx) => {
     });
   }
 
-  // Send the text notification first, then drop those rows only if it
-  // succeeded.
   if (entries.length > 0) {
     const compact: string[] = [];
     const expanded: string[] = [];
@@ -109,7 +117,6 @@ composer.on("deleted_business_messages", async (ctx) => {
     }
   }
 
-  // Send each media message separately, deleting each row only after its send.
   for (const { stored, media, msgId } of mediaMsgs) {
     const header = eventHeader("🗑", "O'chirildi", subject);
     const meta = metaLine(

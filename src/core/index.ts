@@ -1,3 +1,20 @@
+/**
+ * Application entry point: wiring, scheduled work and shutdown.
+ *
+ * Errors are logged as the update id plus the error itself and never the whole
+ * context, which would spill other people's message text into the logs.
+ * Retention runs on start and hourly after that, independent of traffic, so a
+ * quiet bot still forgets on schedule. Notification details carry a shorter
+ * limit than the archive because they duplicate content the archive has
+ * already purged.
+ *
+ * @example
+ * ```sh
+ * bun run dev                  # watch mode, straight from source
+ * bun run build && bun start   # compiled
+ * ```
+ */
+
 import { bot } from "./bot.js";
 import commands from "../commands/index.js";
 import handlers, { ALLOWED_UPDATES } from "../handlers/index.js";
@@ -5,26 +22,19 @@ import { cleanupNotificationDetails, cleanupOldMessages, closeStore } from "../s
 import { COMMANDS } from "../commands/list.js";
 import { OWNER_ID, RETENTION_DAYS } from "./config.js";
 
-// Register commands and handlers via Composer
 bot.use(commands);
 bot.use(handlers);
 
-// Error handler. Log only the update id and the error itself — never the whole
-// context, which would leak other people's private message text into the logs.
 bot.catch((err) => {
   const updateId = err.ctx?.update?.update_id ?? "?";
   const cause = err.error instanceof Error ? err.error.message : String(err.error);
   console.error(`Bot xatosi (update ${updateId}):`, cause);
 });
 
-// Time-based retention cleanup: drop messages older than RETENTION_DAYS, on
-// start and hourly thereafter. Runs regardless of how many messages arrive.
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RETENTION_MS = RETENTION_DAYS * DAY_MS;
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
-// Notification details only back the "Batafsil" button, so they expire well
-// before the archive itself does.
 const DETAILS_TTL_MS = 7 * DAY_MS;
 
 function runCleanup(): void {
@@ -38,8 +48,6 @@ function runCleanup(): void {
 runCleanup();
 const cleanupTimer = setInterval(runCleanup, CLEANUP_INTERVAL_MS);
 
-// Graceful shutdown: stop polling and close the database so updates are not
-// reprocessed on restart and no writes are lost mid-flush.
 let shuttingDown = false;
 async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
@@ -54,8 +62,6 @@ async function shutdown(signal: string): Promise<void> {
 process.once("SIGINT", () => void shutdown("SIGINT"));
 process.once("SIGTERM", () => void shutdown("SIGTERM"));
 
-// Publish the command menu to the owner's chat only, since every command is
-// owner-only. A failure here must not stop the bot from starting.
 async function publishCommands(): Promise<void> {
   try {
     await bot.api.setMyCommands(
@@ -69,6 +75,5 @@ async function publishCommands(): Promise<void> {
 
 void publishCommands();
 
-// Start bot
 console.log("🚀 Bot ishga tushmoqda...");
 bot.start({ allowed_updates: [...ALLOWED_UPDATES] });

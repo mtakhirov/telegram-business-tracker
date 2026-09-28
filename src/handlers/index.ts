@@ -1,3 +1,23 @@
+/**
+ * Handler composition and the update types the bot subscribes to.
+ *
+ * Telegram only delivers the update types named in `allowed_updates`, and it
+ * reports nothing for the ones left out, so a handler for a missing type simply
+ * never runs. `ALLOWED_UPDATES` therefore lives beside the handlers that
+ * consume it, and a test asserts the two stay in step.
+ *
+ * `message` feeds the command handlers, and `callback_query` feeds the
+ * notification expand button.
+ *
+ * @example
+ * ```ts
+ * import handlers, { ALLOWED_UPDATES } from "./handlers/index.js";
+ *
+ * bot.use(handlers);
+ * bot.start({ allowed_updates: [...ALLOWED_UPDATES] });
+ * ```
+ */
+
 import { Composer } from "grammy";
 import businessConnection from "./business-connection.js";
 import businessMessage from "./business-message.js";
@@ -12,14 +32,6 @@ composer.use(editedBusinessMessage);
 composer.use(deletedBusinessMessages);
 composer.use(notificationToggle);
 
-/**
- * Update types the bot subscribes to, kept next to the handlers that consume
- * them: an update type missing here is never delivered by Telegram, so its
- * handler silently never runs. Add one whenever a handler is added.
- *
- * - `message` feeds the command handlers in ../commands
- * - `callback_query` feeds notificationToggle
- */
 export const ALLOWED_UPDATES = [
   "message",
   "callback_query",

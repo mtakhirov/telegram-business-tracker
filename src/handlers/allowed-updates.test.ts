@@ -1,9 +1,17 @@
+/**
+ * Tests that the bot subscribes to every update type its handlers expect.
+ *
+ * Telegram silently delivers nothing for an update type left out of
+ * `allowed_updates`, so this scans the handler sources and compares them with
+ * the declared list. One case guards the scan itself, so a regex that stops
+ * matching cannot make the others pass vacuously.
+ */
+
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-// Importing the handler barrel reaches config and the store.
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "spy-bot-updates-"));
 process.env.BOT_TOKEN = "test-token";
 process.env.ADMIN_CHAT_ID = "123";
@@ -25,11 +33,6 @@ afterAll(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
-/**
- * Update types the handler files actually subscribe to. Telegram only delivers
- * what `allowed_updates` names, so a handler for a type left out never runs and
- * fails silently — exactly how the expand button shipped broken.
- */
 function registeredUpdateTypes(): string[] {
   const types = new Set<string>();
 
@@ -61,8 +64,6 @@ describe("ALLOWED_UPDATES", () => {
   });
 
   test("finds the handler subscriptions it is meant to check", () => {
-    // Guards the scan itself: if the regex stops matching, the test above
-    // would pass vacuously.
     expect(registeredUpdateTypes()).toContain("deleted_business_messages");
     expect(registeredUpdateTypes()).toContain("callback_query");
   });

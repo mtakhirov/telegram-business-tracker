@@ -1,3 +1,30 @@
+/**
+ * The archive: every table, query and retention rule in one place.
+ *
+ * `messages` holds the latest state of each archived message, while
+ * `message_versions` is an append-only chain of every edit, because a message
+ * row is overwritten in place. `chats` records id, title and last-seen time for
+ * every chat the bot observes — metadata only, never content — so `/chats` can
+ * offer chats that are not archived yet. `chat_rules` stores per-chat archiving
+ * decisions, and `notification_details` keeps the two renderings of a sent
+ * notification so its expand button still works after the message row is gone.
+ *
+ * Every delete path reaches all of the tables that hold content, which is why
+ * chat id and connection id are duplicated onto `message_versions` and
+ * `notification_details`.
+ *
+ * The database holds other people's private messages, so the file is created
+ * with mode 600 and its directory with 700.
+ *
+ * @example
+ * ```ts
+ * storeMessage(connectionId, chatId, message);
+ * getVersions(connectionId, chatId, messageId); // [v1, v2, v3]
+ *
+ * cleanupOldMessages(30 * 24 * 60 * 60 * 1000);
+ * ```
+ */
+
 import { Database } from "bun:sqlite";
 import path from "node:path";
 import fs from "node:fs";
@@ -45,7 +72,6 @@ export interface StoredConnection {
   isEnabled: boolean;
 }
 
-// The database holds other people's private messages: keep it readable by the bot user only.
 process.umask(0o077);
 
 const dbPath = path.resolve(DB_PATH);
@@ -99,8 +125,6 @@ db.exec(`
   )
 `);
 
-// Metadata only (id, title, last seen) for every chat the bot observes, so
-// /chats can offer them for tracking. No message content is kept here.
 db.exec(`
   CREATE TABLE IF NOT EXISTS chats (
     chat_id   INTEGER PRIMARY KEY,
@@ -109,7 +133,6 @@ db.exec(`
   )
 `);
 
-// Per-chat archiving decision. A chat with no row falls back to DEFAULT_TRACK_MODE.
 db.exec(`
   CREATE TABLE IF NOT EXISTS chat_rules (
     chat_id    INTEGER PRIMARY KEY,
@@ -118,9 +141,6 @@ db.exec(`
   )
 `);
 
-// Append-only edit chain. `messages` keeps only the latest state, so every
-// intermediate version lives here. chat_id and business_connection_id are
-// duplicated so retention and every delete path can reach these rows.
 db.exec(`
   CREATE TABLE IF NOT EXISTS message_versions (
     id                     INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -134,9 +154,6 @@ db.exec(`
     stored_at              INTEGER NOT NULL
   )
 `);
-// Collapsed and expanded text of a sent notification, so the "Batafsil" button
-// can toggle it later. Kept on its own short TTL because a deleted message's
-// row is purged from `messages` as soon as the notification is delivered.
 db.exec(`
   CREATE TABLE IF NOT EXISTS notification_details (
     token      TEXT PRIMARY KEY,
@@ -268,10 +285,6 @@ export function getMessage(
   return row ? rowToStoredMessage(row) : undefined;
 }
 
-/**
- * Appends a new row to the edit chain, unless the text and caption are
- * unchanged from the latest version.
- */
 function appendVersion(
   key: string,
   businessConnectionId: string,
@@ -336,7 +349,6 @@ export function deleteMessagesByConnection(businessConnectionId: string): number
   return stmtDeleteByConnection.run(businessConnectionId).changes;
 }
 
-/** Deletes messages stored more than `retentionMs` ago. Returns the number of deleted rows. */
 export function cleanupOldMessages(retentionMs: number): number {
   const cutoff = Date.now() - retentionMs;
   stmtCleanupVersions.run(cutoff);
@@ -361,13 +373,11 @@ export function saveConnection(conn: StoredConnection): void {
   stmtUpsertConnection.run(conn.id, conn.userId, conn.isEnabled ? 1 : 0, Date.now());
 }
 
-/** True only for a connection owned by OWNER_ID that is currently enabled. */
 export function isOwnerConnection(id: string): boolean {
   const conn = getConnection(id);
   return !!conn && conn.userId === OWNER_ID && conn.isEnabled;
 }
 
-/** The owner's active business connection, if the bot is currently connected. */
 export function getOwnerConnectionId(): string | undefined {
   const row = stmtOwnerConnection.get(OWNER_ID) as { id: string } | undefined;
   return row?.id;
@@ -382,12 +392,10 @@ export interface KnownChat {
   mode: TrackMode | null;
 }
 
-/** Record that a chat exists, with its current title. Metadata only. */
 export function touchChat(chatId: number, title: string | null): void {
   stmtTouchChat.run(chatId, title, Date.now());
 }
 
-/** Whether this chat should be archived, falling back to DEFAULT_TRACK_MODE. */
 export function isChatTracked(chatId: number): boolean {
   const row = stmtGetChatRule.get(chatId) as { mode: TrackMode } | undefined;
   return (row?.mode ?? DEFAULT_TRACK_MODE) === "allow";
@@ -411,7 +419,6 @@ export function clearChatRule(chatId: number): void {
   stmtDeleteChatRule.run(chatId);
 }
 
-/** Drop every stored message for one chat. Returns the number of deleted rows. */
 export function deleteMessagesByChat(chatId: number): number {
   stmtDeleteVersionsByChat.run(chatId);
   stmtDeleteDetailsByChat.run(chatId);
@@ -423,10 +430,6 @@ export interface NotificationDetails {
   expanded: string;
 }
 
-/**
- * Remembers both renderings of a notification and returns the token to put in
- * the button's callback data.
- */
 export function saveNotificationDetails(chatId: number, details: NotificationDetails): string {
   const token = randomBytes(8).toString("hex");
   stmtInsertDetails.run(token, chatId, details.compact, details.expanded, Date.now());
@@ -438,24 +441,20 @@ export function getNotificationDetails(token: string): NotificationDetails | und
   return row ? { compact: row.compact, expanded: row.expanded } : undefined;
 }
 
-/** Deletes notification details older than `ttlMs`. Returns the deleted count. */
 export function cleanupNotificationDetails(ttlMs: number): number {
   return stmtCleanupDetails.run(Date.now() - ttlMs).changes;
 }
 
-/** Escapes LIKE wildcards so a query is matched literally. */
 function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (char) => `\\${char}`);
 }
 
-/** Substring search over stored text and captions, newest first. */
 export function searchMessages(query: string, limit: number): StoredMessage[] {
   const pattern = `%${escapeLike(query)}%`;
   const rows = stmtSearch.all(pattern, pattern, limit) as Record<string, unknown>[];
   return rows.map(rowToStoredMessage);
 }
 
-/** Most recent stored messages in one chat, newest first. */
 export function listChatMessages(chatId: number, limit: number): StoredMessage[] {
   const rows = stmtChatMessages.all(chatId, limit) as Record<string, unknown>[];
   return rows.map(rowToStoredMessage);
@@ -483,7 +482,6 @@ export interface ExportedMessage extends StoredMessage {
   versions: MessageVersion[];
 }
 
-/** Every stored message with its edit chain attached, oldest first. */
 export function exportMessages(chatId?: number): ExportedMessage[] {
   const messageRows = (chatId === undefined ? stmtExportAll.all() : stmtExportByChat.all(chatId)) as Record<
     string,
@@ -510,7 +508,6 @@ export function exportMessages(chatId?: number): ExportedMessage[] {
   return exported;
 }
 
-/** Full edit chain for one message, oldest version first. */
 export function getVersions(
   businessConnectionId: string,
   chatId: number,

@@ -1,14 +1,25 @@
+/**
+ * Sending archived media with its notification text.
+ *
+ * A caption caps at 1024 characters, well below a message's 4096. When the
+ * header and body fit that budget they travel with the media; otherwise the
+ * media carries the header alone and the body follows as separate messages, so
+ * nothing is silently dropped.
+ *
+ * Stickers are the exception: Telegram accepts no caption on them, so the text
+ * always follows as its own message.
+ *
+ * @example
+ * ```ts
+ * await sendMediaWithBlocks(api, adminChatId, media, header, contentBlocks(caption));
+ * ```
+ */
+
 import type { Api } from "grammy";
 import type { InlineKeyboardMarkup } from "grammy/types";
 import type { MediaInfo } from "./format.js";
 import { MAX_CAPTION_LENGTH, packBlocks, sendBlocks } from "./telegram-limits.js";
 
-/**
- * Send media with a `header` (short HTML, must fit a caption) plus optional
- * body blocks. When header + body fit the caption limit they go together;
- * otherwise the media carries the header alone and the body follows as separate
- * text messages so nothing is dropped.
- */
 export async function sendMediaWithBlocks(
   api: Api,
   chatId: number | string,
@@ -54,7 +65,6 @@ export async function sendMedia(
       await api.sendAnimation(chatId, media.fileId, opts);
       break;
     case "sticker":
-      // Sticker doesn't support caption, send sticker + text separately
       await api.sendSticker(chatId, media.fileId);
       await api.sendMessage(chatId, caption, { parse_mode: "HTML", reply_markup: replyMarkup });
       break;

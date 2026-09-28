@@ -1,10 +1,16 @@
+/**
+ * Tests for the archive.
+ *
+ * The store opens its database when the module is first imported, so the
+ * environment is set before the dynamic import and every test file runs against
+ * its own temporary file under `bun test --isolate`.
+ */
+
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-// The store opens its database at import time, so the environment must be set
-// before the dynamic import below.
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "spy-bot-test-"));
 process.env.BOT_TOKEN = "test-token";
 process.env.ADMIN_CHAT_ID = "123";
@@ -139,7 +145,6 @@ describe("retention", () => {
     store.storeMessage(CONN, 888, { message_id: 30, date: 1700000040, text: "eski" });
     await Bun.sleep(5);
 
-    // A 1 ms window makes the row above older than the cutoff.
     expect(store.cleanupOldMessages(1)).toBeGreaterThan(0);
     expect(store.getMessage(CONN, 888, 30)).toBeUndefined();
   });

@@ -1,3 +1,15 @@
+/**
+ * The `/versions` reply: the full edit chain of one message.
+ *
+ * `v1` is the text as first received; each later version is an edit. The first
+ * version has no edit timestamp, so it falls back to when the bot stored it.
+ *
+ * @example
+ * ```text
+ * /versions 555 1042
+ * ```
+ */
+
 import { Composer } from "grammy";
 import { OWNER_ID } from "../../core/config.js";
 import { getOwnerConnectionId, getVersions } from "../../store/message-store.js";

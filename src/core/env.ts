@@ -1,35 +1,35 @@
+/**
+ * Environment schema, validated once at startup.
+ *
+ * A misconfigured deployment fails immediately with a readable list of what is
+ * wrong, rather than throwing on the first update hours later. Only
+ * `BOT_TOKEN` and `ADMIN_CHAT_ID` are required; everything else has a default
+ * that suits a single-owner install.
+ *
+ * @example Inspecting the schema interactively
+ * ```sh
+ * bunx @envin/cli@latest dev -c src/core/env.ts
+ * ```
+ *
+ * @example A missing value
+ * ```text
+ * Invalid environment variables:
+ *    BOT_TOKEN: Invalid input: expected string, received undefined
+ * ```
+ */
+
 import "dotenv/config";
 import { defineEnv } from "envin";
 import * as z from "zod";
 
-/**
- * Raw environment schema. Validated once at startup so a misconfigured
- * deployment fails immediately instead of at the first update.
- *
- * Live preview: `bunx @envin/cli@latest dev -c src/core/env.ts`
- */
 export default defineEnv({
   server: {
-    /** Bot token from @BotFather. */
     BOT_TOKEN: z.string().min(1),
-    /** Chat that receives notifications: your user ID, or a group/channel ID. */
     ADMIN_CHAT_ID: z.string().min(1),
-    /**
-     * Telegram user ID of the only account allowed to connect this bot.
-     * Defaults to ADMIN_CHAT_ID when that is your own user ID.
-     */
     OWNER_ID: z.coerce.number().int().positive().optional(),
-    /** Display name used in the bot's own messages. */
     BOT_NAME: z.string().min(1).default("Business Chat Archive"),
-    /** SQLite database file. Relative paths resolve against the working directory. */
     DB_PATH: z.string().min(1).default("data/messages.db"),
-    /** Days to keep stored messages before automatic cleanup. */
     RETENTION_DAYS: z.coerce.number().int().min(1).default(30),
-    /**
-     * Whether a chat with no explicit rule is archived.
-     * "deny" is the privacy-preserving default: archive only chats you add
-     * with /track.
-     */
     DEFAULT_TRACK_MODE: z.enum(["allow", "deny"]).default("allow"),
   },
   env: process.env,

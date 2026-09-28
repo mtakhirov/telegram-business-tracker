@@ -1,3 +1,15 @@
+/**
+ * The "ℹ️ Batafsil" button on a notification.
+ *
+ * Pressing it swaps the stored expanded rendering into the message and turns
+ * the button into "▲ Yashirish"; pressing that restores the compact one. A
+ * media notification carries its text in a caption, so it is edited with
+ * `editMessageCaption` rather than `editMessageText`.
+ *
+ * Details expire on their own schedule, so an old button answers with a notice
+ * instead of failing silently.
+ */
+
 import { Composer, GrammyError } from "grammy";
 import { OWNER_ID } from "../core/config.js";
 import { getNotificationDetails } from "../store/message-store.js";
@@ -30,7 +42,6 @@ composer.callbackQuery(TOGGLE_PATTERN, async (ctx) => {
       await ctx.editMessageText(text, { parse_mode: "HTML", reply_markup });
     }
   } catch (error) {
-    // A double tap re-sends the state the message is already in.
     const unchanged = error instanceof GrammyError && error.description.includes("message is not modified");
     if (!unchanged) throw error;
   }

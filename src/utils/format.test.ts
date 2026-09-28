@@ -1,3 +1,11 @@
+/**
+ * Tests for the shared rendering primitives.
+ *
+ * The `formatWhen` cases fix `now` so the relative branches are deterministic,
+ * and one of them crosses the Tashkent day boundary: 20:00 UTC is already the
+ * next day at UTC+5.
+ */
+
 import { describe, expect, test } from "bun:test";
 import { escapeHtml, formatWhen, getMediaInfo, getUserDisplayName } from "./format.js";
 
@@ -34,7 +42,7 @@ describe("getUserDisplayName", () => {
 });
 
 describe("formatWhen", () => {
-  const now = new Date("2026-09-28T12:00:00Z"); // 17:00 in Asia/Tashkent
+  const now = new Date("2026-09-28T12:00:00Z");
 
   test("shows time only for today", () => {
     expect(formatWhen(new Date("2026-09-28T09:32:00Z"), now)).toBe("14:32");
@@ -53,7 +61,6 @@ describe("formatWhen", () => {
   });
 
   test("uses the Tashkent day boundary", () => {
-    // 20:00 UTC is already the next day in Tashkent (01:00).
     expect(formatWhen(new Date("2026-09-27T20:00:00Z"), now)).toBe("01:00");
   });
 

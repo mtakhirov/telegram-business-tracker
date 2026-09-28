@@ -1,3 +1,11 @@
+/**
+ * Tests for the outgoing API defaults.
+ *
+ * The recording transformer is installed before the one under test, because
+ * grammY runs transformers in reverse installation order and the recorder has
+ * to observe the payload after it was modified.
+ */
+
 import { describe, expect, test } from "bun:test";
 import { Api } from "grammy";
 import { disableLinkPreviews } from "./api-defaults.js";

@@ -1,15 +1,23 @@
+/**
+ * The command surface, in one place.
+ *
+ * `/help` renders this list, and it is registered with Telegram through
+ * `setMyCommands` so the in-app menu matches. Adding a command means adding it
+ * here as well, or it will work but stay invisible.
+ *
+ * @example
+ * ```ts
+ * { command: "track", description: "Chatni arxivlash", args: "<chat_id>" }
+ * // /help shows:  /track <chat_id> — Chatni arxivlash
+ * ```
+ */
+
 export interface CommandSpec {
   command: string;
-  /** Shown in the Telegram command menu; keep it short. */
   description: string;
-  /** Argument hint shown by /help. */
   args?: string;
 }
 
-/**
- * Single source of truth for the command surface: rendered by /help and
- * registered with Telegram via setMyCommands.
- */
 export const COMMANDS: CommandSpec[] = [
   { command: "start", description: "Bot haqida ma'lumot" },
   { command: "help", description: "Buyruqlar ro'yxati" },

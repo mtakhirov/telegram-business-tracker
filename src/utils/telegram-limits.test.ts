@@ -1,3 +1,10 @@
+/**
+ * Tests for splitting and packing notification text.
+ *
+ * The cases that matter are the ones Telegram would reject: a cut through an
+ * HTML entity, and a `<s>` tag split across two messages.
+ */
+
 import { describe, expect, test } from "bun:test";
 import { MAX_MESSAGE_LENGTH, contentBlocks, diffBlocks, packBlocks, splitText } from "./telegram-limits.js";
 
@@ -24,7 +31,6 @@ describe("splitText", () => {
   });
 
   test("never cuts through an HTML entity", () => {
-    // &amp; straddles the limit; the cut must move before the ampersand.
     const chunks = splitText(`${"x".repeat(8)}&amp;${"y".repeat(20)}`, 10);
     for (const chunk of chunks) {
       expect(chunk).not.toMatch(/&[a-z]*$/);
@@ -98,7 +104,6 @@ describe("diffBlocks", () => {
     expect(blocks.length).toBeGreaterThan(1);
     for (const block of blocks) {
       expect(block.length).toBeLessThanOrEqual(MAX_MESSAGE_LENGTH);
-      // Each <s> must open and close inside a single block.
       expect(block.split("<s>").length).toBe(block.split("</s>").length);
     }
   });

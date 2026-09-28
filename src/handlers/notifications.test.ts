@@ -1,3 +1,13 @@
+/**
+ * Tests for what a notification actually looks like.
+ *
+ * Handlers run against a real grammY `Context` whose `Api` is intercepted by a
+ * transformer, so these assert the exact text and buttons Telegram would
+ * receive. Timestamps are taken from the current time so the "today" branch of
+ * `formatWhen` is used, and the expected value is built with the same helper —
+ * the formatting itself is covered by its own tests.
+ */
+
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -5,8 +15,6 @@ import path from "node:path";
 import { Api, Context } from "grammy";
 import type { InlineKeyboardMarkup, Update, UserFromGetMe } from "grammy/types";
 
-// Handlers reach config and the store at import time, so the environment has
-// to be in place before the dynamic imports below.
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "spy-bot-notify-"));
 const ADMIN = 123;
 process.env.BOT_TOKEN = "test-token";
@@ -33,8 +41,6 @@ const groupChat = { id: GROUP, title: "Sotuv bo'limi", type: "supergroup" as con
 const counterparty = { id: CHAT, is_bot: false, first_name: "Ali Valiev", username: "alivaliev" };
 const owner = { id: ADMIN, is_bot: false, first_name: "Men" };
 
-// The header links the chat label; a meta line links getUserDisplayName, which
-// also carries the username.
 const ALI_LINK = `<a href="https://t.me/alivaliev">Ali Valiev</a>`;
 const ALI_SENDER_LINK = `<a href="https://t.me/alivaliev">Ali Valiev (@alivaliev)</a>`;
 const OWNER_LINK = `<a href="tg://user?id=${ADMIN}">Men</a>`;
@@ -44,7 +50,6 @@ interface Call {
   payload: Record<string, unknown>;
 }
 
-/** Runs a handler against one update and returns the API calls it made. */
 async function run(handler: keyof typeof handlers, update: Partial<Update>): Promise<Call[]> {
   const calls: Call[] = [];
   const api = new Api("dummy-token");
@@ -60,7 +65,6 @@ async function run(handler: keyof typeof handlers, update: Partial<Update>): Pro
 
 const body = (call: Call) => (call.payload.text ?? call.payload.caption) as string;
 
-/** The expand token carried by the call's inline button, if it has one. */
 function token(call: Call): string {
   const markup = call.payload.reply_markup as InlineKeyboardMarkup | undefined;
   const button = markup?.inline_keyboard?.[0]?.[0];
@@ -70,7 +74,6 @@ function token(call: Call): string {
   return data.slice("nd:x:".length);
 }
 
-/** The expanded rendering the button would swap in. */
 const expandedOf = (call: Call) => store.getNotificationDetails(token(call))!.expanded;
 
 beforeAll(async () => {
@@ -92,7 +95,6 @@ afterAll(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
-/** A timestamp a minute ago, so the "today" branch of formatWhen is used. */
 const recently = () => Math.floor(Date.now() / 1000) - 60;
 
 describe("deleted notifications", () => {

@@ -1,3 +1,11 @@
+/**
+ * Notifying about edits, and keeping the version chain honest.
+ *
+ * The new version is stored before the notification goes out. If the send
+ * fails, the archive still holds the correct latest text, so the next edit is
+ * compared against the right version instead of a stale one.
+ */
+
 import { Composer } from "grammy";
 import { ADMIN_CHAT_ID } from "../core/config.js";
 import { getMessage, storeMessage, isOwnerConnection, isChatTracked } from "../store/message-store.js";
@@ -20,11 +28,8 @@ composer.on("edited_business_message", async (ctx) => {
 
   const original = getMessage(businessConnectionId, chatId, messageId);
 
-  // Store the new version now, before notifying. If the send fails, the next
-  // edit still compares against the correct previous version.
   storeMessage(businessConnectionId, chatId, editedMsg);
 
-  // A sender id different from the chat id means the owner edited their own message.
   const sender =
     editedMsg.from && editedMsg.from.id !== chatId
       ? userLink(editedMsg.from, getUserDisplayName(editedMsg.from))

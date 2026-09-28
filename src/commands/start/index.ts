@@ -1,3 +1,12 @@
+/**
+ * The `/start` reply, including the business-chat deep link.
+ *
+ * Telegram opens the bot with a `bizChat<id>` payload from a business chat's
+ * management button; that variant answers with the chat's id and the commands
+ * that act on it. Anyone who is not the owner gets no reply at all, so the bot
+ * gives nothing away.
+ */
+
 import { Composer } from "grammy";
 import { BOT_NAME, OWNER_ID } from "../../core/config.js";
 import { escapeHtml } from "../../utils/format.js";
@@ -5,13 +14,11 @@ import { escapeHtml } from "../../utils/format.js";
 const composer = new Composer();
 
 composer.command("start", async (ctx) => {
-  // Private tool: ignore everyone except the owner, and reveal nothing.
   if (ctx.from?.id !== OWNER_ID) return;
 
   const name = escapeHtml(BOT_NAME);
   const payload = ctx.match;
 
-  // Deep link from a business chat's management button.
   if (payload && payload.startsWith("bizChat")) {
     const chatId = escapeHtml(payload.slice(7));
     await ctx.reply(

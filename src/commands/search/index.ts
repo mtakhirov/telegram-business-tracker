@@ -1,3 +1,18 @@
+/**
+ * Reading the archive back: `/search` across chats and `/history` within one.
+ *
+ * Results are trimmed to an excerpt, newest first. A sender is named only when
+ * it is not the counterparty, which in a private chat means the message was the
+ * owner's own.
+ *
+ * @example
+ * ```text
+ * /search kitob          matching messages from every archived chat
+ * /history 555           the last 20 messages stored for chat 555
+ * /history 555 100       up to 100 of them
+ * ```
+ */
+
 import { Composer } from "grammy";
 import { OWNER_ID } from "../../core/config.js";
 import { listChatMessages, searchMessages, type StoredMessage } from "../../store/message-store.js";
@@ -11,14 +26,11 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 const SNIPPET_LENGTH = 300;
 
-/** Meta line plus a trimmed excerpt, rendered on consecutive lines. */
 function resultBlocks(message: StoredMessage, options: { showChat: boolean }): string[] {
   const media = getMediaInfo(message);
   const raw = message.text || message.caption || "";
   const snippet = raw.length > SNIPPET_LENGTH ? `${raw.slice(0, SNIPPET_LENGTH)}…` : raw;
 
-  // In a private chat the chat id equals the counterparty's user id, so a
-  // different sender id means the message was the owner's own.
   const sender =
     message.from && message.from.id !== message.chatId
       ? userLink(message.from, getUserDisplayName(message.from))

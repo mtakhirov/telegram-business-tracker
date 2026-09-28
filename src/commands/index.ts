@@ -1,3 +1,10 @@
+/**
+ * Command composition.
+ *
+ * `/help` is registered first so it answers even if a later command throws
+ * while being set up.
+ */
+
 import { Composer } from "grammy";
 import start from "./start/index.js";
 import stats from "./stats/index.js";

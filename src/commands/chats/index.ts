@@ -1,3 +1,24 @@
+/**
+ * Deciding which chats are archived.
+ *
+ * A chat with no rule falls back to `DEFAULT_TRACK_MODE`, so `deny` makes the
+ * archive opt-in. `/untrack` only stops future archiving; `/forget` is the one
+ * that erases what was already stored, and it cannot be undone.
+ *
+ * A positive chat id is a private chat and doubles as the user id, which is
+ * what the profile links are built from. The chats table stores no username,
+ * so those links always take the id form.
+ *
+ * @example
+ * ```text
+ * /chats                 list every known chat and its rule
+ * /track 555             archive this chat
+ * /untrack 555           stop archiving it
+ * /untrack_reset 555     drop the rule, fall back to the default
+ * /forget 555            delete what was stored for it
+ * ```
+ */
+
 import { Composer, type CommandContext, type Context } from "grammy";
 import { DEFAULT_TRACK_MODE, OWNER_ID } from "../../core/config.js";
 import { clearChatRule, deleteMessagesByChat, listChats, setChatRule } from "../../store/message-store.js";
@@ -9,7 +30,6 @@ const composer = new Composer();
 
 const MODE_WORD = { allow: "arxivlanadi", deny: "arxivlanmaydi" } as const;
 
-/** Parses a chat ID argument, which may be negative for groups. */
 function parseChatId(raw: string): number | null {
   const trimmed = raw.trim();
   if (!/^-?\d+$/.test(trimmed)) return null;
@@ -35,8 +55,6 @@ composer.command("chats", async (ctx) => {
         .map((chat) => {
           const effective = chat.mode ?? DEFAULT_TRACK_MODE;
           const icon = effective === "allow" ? "✓" : "✗";
-          // A positive id is a private chat, so it doubles as the user id.
-          // The chats table has no username, so this is always the id form.
           const label = chat.title ?? `Chat ${chat.chatId}`;
           const name = chat.chatId > 0 ? userLink({ id: chat.chatId }, label) : escapeHtml(label);
           const rule = chat.mode ? " (qoida)" : "";

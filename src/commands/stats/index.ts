@@ -1,3 +1,10 @@
+/**
+ * The `/stats` reply: archive size, start time and retention window.
+ *
+ * The start time is captured when the module is first loaded, which happens
+ * during startup, so it reports when the bot actually came up.
+ */
+
 import { Composer } from "grammy";
 import { getStoreSize } from "../../store/message-store.js";
 import { OWNER_ID, RETENTION_DAYS } from "../../core/config.js";
@@ -5,7 +12,6 @@ import { formatWhen } from "../../utils/format.js";
 
 const composer = new Composer();
 
-// Captured once when the module loads at startup — the real bot start time.
 const STARTED_AT = new Date();
 
 composer.command("stats", async (ctx) => {

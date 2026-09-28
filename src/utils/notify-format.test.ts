@@ -1,3 +1,7 @@
+/**
+ * Tests for notification headers, meta lines and profile links.
+ */
+
 import { describe, expect, test } from "bun:test";
 import { chatLabel, eventHeader, metaLine, userLink, withMeta, withNote } from "./notify-format.js";
 

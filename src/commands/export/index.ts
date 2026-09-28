@@ -1,3 +1,18 @@
+/**
+ * Exporting the archive as a JSON document.
+ *
+ * Each message carries its full edit chain, so the export is a complete record
+ * rather than a snapshot of the latest text. A bot may upload at most 50 MB, so
+ * an export approaching that is refused with a suggestion to narrow it to one
+ * chat instead of failing inside the API call.
+ *
+ * @example
+ * ```text
+ * /export        the whole archive
+ * /export 555    one chat
+ * ```
+ */
+
 import { Composer, InputFile } from "grammy";
 import { BOT_NAME, OWNER_ID } from "../../core/config.js";
 import { exportMessages } from "../../store/message-store.js";
@@ -5,8 +20,6 @@ import { getMediaInfo } from "../../utils/format.js";
 
 const composer = new Composer();
 
-// Bots may upload documents up to 50 MB; stay below it and ask for a narrower
-// export instead of failing the API call.
 const MAX_EXPORT_BYTES = 45 * 1024 * 1024;
 
 composer.command("export", async (ctx) => {

@@ -1,3 +1,11 @@
+/**
+ * Tests for the notification expand button.
+ *
+ * Covers both directions of the toggle, the caption variant used by media
+ * notifications, an expired token and a press from someone who is not the
+ * owner.
+ */
+
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -27,7 +35,6 @@ interface Call {
   payload: Record<string, unknown>;
 }
 
-/** Fires a button press and returns the API calls the handler made. */
 async function press(
   data: string,
   options: { from?: typeof owner; asCaption?: boolean } = {},

@@ -1,3 +1,7 @@
+/**
+ * The `/help` reply, rendered from the shared command list.
+ */
+
 import { Composer } from "grammy";
 import { OWNER_ID } from "../../core/config.js";
 import { escapeHtml } from "../../utils/format.js";

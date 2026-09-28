@@ -1,3 +1,26 @@
+/**
+ * Sending a notification that can be expanded in place.
+ *
+ * Every notification is rendered twice: a compact form that shows only the
+ * event, the subject and the content, and an expanded form that adds the meta
+ * line and the follow-up commands. The compact form goes out with an
+ * "ℹ️ Batafsil" button, and both renderings are stored so pressing it can swap
+ * one for the other later.
+ *
+ * The toggle rewrites a single message, so the button is only attached when
+ * both renderings fit one message. Anything longer is sent expanded from the
+ * start, where the meta line is a small part of the whole anyway.
+ *
+ * @example
+ * ```ts
+ * await sendNotification(api, adminChatId, {
+ *   sourceChatId: chat.id,
+ *   compact: [header, ...contentBlocks(text)],
+ *   expanded: [`${header}\n${meta}`, ...contentBlocks(text), `/history ${chat.id}`],
+ * });
+ * ```
+ */
+
 import type { Api } from "grammy";
 import type { InlineKeyboardMarkup } from "grammy/types";
 import type { MediaInfo } from "./format.js";
@@ -8,7 +31,6 @@ import { MAX_CAPTION_LENGTH, MAX_MESSAGE_LENGTH, packBlocks, sendBlocks } from "
 export const EXPAND_PREFIX = "nd:x:";
 export const COLLAPSE_PREFIX = "nd:o:";
 
-/** Matches both callback payloads; group 1 is the mode, group 2 the token. */
 export const TOGGLE_PATTERN = /^nd:(x|o):([0-9a-f]{16})$/;
 
 function toggleKeyboard(prefix: string, token: string, label: string): InlineKeyboardMarkup {
@@ -22,22 +44,12 @@ export const collapseKeyboard = (token: string): InlineKeyboardMarkup =>
   toggleKeyboard(COLLAPSE_PREFIX, token, "▲ Yashirish");
 
 export interface NotificationOptions {
-  /** The chat the notification is about, so /forget can purge its details. */
   sourceChatId: number;
-  /** Headline and content, with the meta line hidden. */
   compact: string[];
-  /** The same notification with the meta line and follow-up commands. */
   expanded: string[];
   media?: MediaInfo | null;
 }
 
-/**
- * Sends a notification that can be expanded in place.
- *
- * The toggle rewrites one message, so the button is only attached when both
- * renderings fit a single message. A longer notification is sent expanded
- * straight away — its meta line is a small part of it anyway.
- */
 export async function sendNotification(
   api: Api,
   target: number | string,
