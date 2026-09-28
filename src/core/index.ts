@@ -6,9 +6,12 @@ import handlers from "../handlers/index.js";
 bot.use(commands);
 bot.use(handlers);
 
-// Error handler
+// Error handler. Log only the update id and the error itself — never the whole
+// context, which would leak other people's private message text into the logs.
 bot.catch((err) => {
-  console.error("Bot xatosi:", err);
+  const updateId = err.ctx?.update?.update_id ?? "?";
+  const cause = err.error instanceof Error ? err.error.message : String(err.error);
+  console.error(`Bot xatosi (update ${updateId}):`, cause);
 });
 
 // Start bot
