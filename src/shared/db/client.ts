@@ -24,6 +24,7 @@ import path from "node:path";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 import { DB_PATH } from "../config/index.js";
+import { log } from "../lib/logger.js";
 import * as schema from "./schema.js";
 
 process.umask(0o077);
@@ -45,7 +46,7 @@ for (const file of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) {
   try {
     if (fs.existsSync(file)) fs.chmodSync(file, 0o600);
   } catch {
-    console.warn(`Could not restrict permissions of ${file}`);
+    log.warn({ file }, "could not restrict database file permissions");
   }
 }
 

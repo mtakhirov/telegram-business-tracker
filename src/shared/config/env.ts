@@ -22,6 +22,7 @@
 import "dotenv/config";
 import { defineEnv } from "envin";
 import * as z from "zod";
+import { log } from "../lib/logger.js";
 
 export default defineEnv({
   server: {
@@ -32,15 +33,15 @@ export default defineEnv({
     DB_PATH: z.string().min(1).default("data/messages.db"),
     RETENTION_DAYS: z.coerce.number().int().min(1).default(30),
     DEFAULT_TRACK_MODE: z.enum(["allow", "deny"]).default("allow"),
+    HEALTH_PORT: z.coerce.number().int().min(0).max(65535).default(3000),
   },
   env: process.env,
   onError: (issues) => {
-    console.error("❌ Invalid environment variables:");
-    for (const issue of issues) {
-      const key = issue.path?.join(".") || "(root)";
-      console.error(`   ${key}: ${issue.message}`);
-    }
-    console.error("\nSee .env.example for the expected values.");
+    const problems = issues.map((issue) => ({
+      key: issue.path?.join(".") || "(root)",
+      message: issue.message,
+    }));
+    log.fatal({ problems }, "invalid environment variables, see .env.example");
     process.exit(1);
   },
 });

@@ -23,6 +23,8 @@ import { cleanupNotificationDetails } from "../entities/notification/repository.
 import { closeDb } from "../shared/db/client.js";
 import { COMMANDS } from "../shared/telegram/command-list.js";
 import { OWNER_ID } from "../shared/config/index.js";
+import { log } from "../shared/lib/logger.js";
+import { startHealthServer } from "./health.js";
 import { getRetentionDays } from "../entities/settings/repository.js";
 
 bot.use(commands);
@@ -31,7 +33,7 @@ bot.use(handlers);
 bot.catch((err) => {
   const updateId = err.ctx?.update?.update_id ?? "?";
   const cause = err.error instanceof Error ? err.error.message : String(err.error);
-  console.error(`Bot xatosi (update ${updateId}):`, cause);
+  log.error({ updateId, err: cause }, "update failed");
 });
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -42,20 +44,22 @@ const DETAILS_TTL_MS = 7 * DAY_MS;
 function runCleanup(): void {
   const removed = cleanupOldMessages(getRetentionDays().value * DAY_MS);
   if (removed > 0) {
-    console.log(`🧹 Eskirgan ${removed} ta xabar o'chirildi`);
+    log.info({ removed }, "retention sweep");
   }
   cleanupNotificationDetails(DETAILS_TTL_MS);
 }
 
 runCleanup();
 const cleanupTimer = setInterval(runCleanup, CLEANUP_INTERVAL_MS);
+const healthServer = startHealthServer();
 
 let shuttingDown = false;
 async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
-  console.log(`\n${signal} qabul qilindi, to'xtatilmoqda...`);
+  log.info({ signal }, "shutting down");
   clearInterval(cleanupTimer);
+  healthServer?.stop();
   await bot.stop();
   closeDb();
   process.exit(0);
@@ -71,11 +75,11 @@ async function publishCommands(): Promise<void> {
       { scope: { type: "chat", chat_id: OWNER_ID } },
     );
   } catch (error) {
-    console.warn("Buyruqlar menyusini o'rnatib bo'lmadi:", error instanceof Error ? error.message : error);
+    log.warn({ err: error instanceof Error ? error.message : error }, "could not publish the command menu");
   }
 }
 
 void publishCommands();
 
-console.log("🚀 Bot ishga tushmoqda...");
+log.info("starting");
 bot.start({ allowed_updates: [...ALLOWED_UPDATES] });

@@ -16,4 +16,8 @@ COPY --from=build /app /app
 RUN mkdir -p /app/data && chown -R bun:bun /app
 
 USER bun
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD bun -e "const r = await fetch('http://127.0.0.1:' + (process.env.HEALTH_PORT ?? 3000) + '/health'); process.exit(r.ok ? 0 : 1)"
+
 ENTRYPOINT [ "bun", "--bun", "run", "start" ]
