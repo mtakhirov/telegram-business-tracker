@@ -16,7 +16,6 @@ console.log("🚀 Bot ishga tushmoqda...");
 bot.start({
   allowed_updates: [
     "message",
-    "edited_message",
     "business_connection",
     "business_message",
     "edited_business_message",
