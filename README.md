@@ -1,238 +1,94 @@
-# Business Chat Archive
+<p align="center">
+  <img src="./.github/assets/header.svg" alt="Business Chat Archive — a self-hosted archive for your own Telegram Business chats" width="100%">
+</p>
 
-A self-hosted Telegram bot that keeps an archive of your own Telegram Business
-conversations, including the versions of messages that were later **edited** or
-**deleted**.
+<p align="center">
+  <a href="#license"><img src="https://img.shields.io/badge/license-MIT-FF6A1A?style=flat-square&labelColor=111318" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/Bun-1.4-F4F4F2?style=flat-square&labelColor=111318" alt="Bun 1.4">
+  <img src="https://img.shields.io/badge/TypeScript-7.0-F4F4F2?style=flat-square&labelColor=111318" alt="TypeScript 7.0">
+  <img src="https://img.shields.io/badge/grammY-1.40-F4F4F2?style=flat-square&labelColor=111318" alt="grammY 1.40">
+  <img src="https://img.shields.io/badge/Drizzle-0.45-F4F4F2?style=flat-square&labelColor=111318" alt="Drizzle ORM 0.45">
+  <img src="https://img.shields.io/badge/oxlint%20%2B%20oxfmt-oxc-F4F4F2?style=flat-square&labelColor=111318" alt="oxc">
+  <img src="https://img.shields.io/badge/tests-140-FF6A1A?style=flat-square&labelColor=111318" alt="140 tests">
+</p>
 
-Built on the official [Telegram Business Bot API][business-api], which delivers
-`business_message`, `edited_business_message` and `deleted_business_messages`
-updates to a bot you connect to your own business account.
+Keeps a record of your own Telegram Business conversations, including the versions of messages that were later edited or deleted.
 
-[business-api]: https://core.telegram.org/bots/api#business-connection
+## Documentation
+
+Guides for operators and developers, in two languages:
+[English](docs/en/index.md) · [Oʻzbekcha](docs/uz/index.md).
 
 ## Read this before you run it
 
-This bot stores the messages of the people you chat with, including content they
-later deleted. That has consequences you own, not the author of this code:
+This bot stores the messages of the people you chat with, including content they later deleted. That has consequences you own, not the author of this code:
 
-- **You become the data controller.** Whoever runs this instance is responsible
-  for the personal data it stores. Depending on where you and your contacts
-  live, that can mean obligations under GDPR, Uzbekistan's ZRU-547 or an
-  equivalent law: a lawful basis for processing, local storage requirements,
-  registration, and deletion on request.
-- **Your contacts do not automatically know.** Do not assume Telegram tells
-  them. Check what the other side actually sees, and tell them yourself.
-- **Telegram may act on it.** Bots whose purpose is to defeat other people's
-  message deletion get reported and removed. Read the Bot Terms before you
-  publish anything based on this.
-- **Keep the retention window short.** `RETENTION_DAYS` defaults to 30. Lower is
-  better.
-- **Archive only the chats you need.** Set `DEFAULT_TRACK_MODE=deny` and add
-  chats explicitly with `/track`.
+| Concern              | What it means for you                                                                                           |
+| -------------------- | --------------------------------------------------------------------------------------------------------------- |
+| You are the operator | Whoever runs the instance is responsible for the personal data it holds — GDPR, ZRU-547 or the local equivalent   |
+| Nobody is told       | Do not assume Telegram informs the other side; check what they see, and tell them yourself                        |
+| Telegram may act     | Bots built to defeat message deletion get reported and removed; read the Bot Terms first                          |
+| Keep it short        | `RETENTION_DAYS` defaults to 30, and lower is better                                                              |
+| Keep it narrow       | Set `DEFAULT_TRACK_MODE=deny` and add chats with `/track`                                                         |
 
-The intended use is a business keeping a record of its own customer
-conversations, with the other side informed. Using it to monitor people who do
-not know is not what this project is for.
+Intended use is a business keeping a record of its own customer conversations, with the other side informed. Monitoring people who do not know is not what this project is for. [Privacy and the law](docs/en/privacy.md) goes into detail.
+
+## How it works
+
+| Event       | What the bot does                                                 |
+| ----------- | ----------------------------------------------------------------- |
+| New message | Stored, if the chat is archived                                   |
+| Edited      | Notifies with the old text struck through above the new one       |
+| Deleted     | Notifies with the stored content, then drops the row              |
+| Connection  | Notifies on connect and disconnect, and purges data on disconnect |
+
+A notification leads with the event and the chat, whose name links to the person's Telegram profile. Ids, the exact timestamp and follow-up commands sit behind a **Batafsil** button that expands the message in place.
+
+Nothing is sent to a third party. The archive is a SQLite file on your own machine.
 
 ## Requirements
 
-- [Bun](https://bun.sh) 1.2+ — the code uses `bun:sqlite`, so Node.js will not
-  run it
-- A Telegram Premium subscription (Telegram Business is a Premium feature)
+- [Bun](https://bun.sh) 1.2 or newer — the code uses `bun:sqlite`, so Node.js will not run it
+- A Telegram Premium subscription, because Telegram Business is a Premium feature
 - A bot token from [@BotFather](https://t.me/BotFather)
 
-## Setup
+## Getting started
 
-```bash
+```sh
 bun install
 cp .env.example .env
+bun run dev
 ```
 
-Fill in `.env`:
+Only `BOT_TOKEN` and `ADMIN_CHAT_ID` are required. Migrations run on startup, so the database builds itself on first launch.
 
-| Variable             | Required | Default               | Purpose                                                             |
-| -------------------- | -------- | --------------------- | ------------------------------------------------------------------- |
-| `BOT_TOKEN`          | yes      | —                     | Token from @BotFather                                               |
-| `ADMIN_CHAT_ID`      | yes      | —                     | Where notifications are sent                                        |
-| `OWNER_ID`           | no\*     | `ADMIN_CHAT_ID`       | The only user allowed to connect the bot                            |
-| `BOT_NAME`           | no       | `Business Chat Archive` | Display name used in the bot's own messages                       |
-| `DB_PATH`            | no       | `data/messages.db`    | SQLite file location                                                |
-| `RETENTION_DAYS`     | no       | `30`                  | Days before a stored message is deleted                             |
-| `DEFAULT_TRACK_MODE` | no       | `allow`               | Whether a chat with no rule is archived (`allow` or `deny`)          |
-| `HEALTH_PORT`        | no       | `3000`                | Health endpoint port on 127.0.0.1; `0` disables it                  |
-| `BACKUP_DIR`         | no       | `data/backups`        | Where database snapshots are written                                |
-| `BACKUP_INTERVAL_HOURS` | no    | `24`                  | Hours between snapshots; `0` disables them                          |
-| `BACKUP_KEEP`        | no       | `7`                   | How many snapshots to keep                                          |
-| `LOG_LEVEL`          | no       | `info`                | pino log level                                                       |
-| `LOG_PRETTY`         | no       | —                     | Set to `1` for human-readable logs while developing                 |
-
-\* `OWNER_ID` is required when `ADMIN_CHAT_ID` is a group or channel, because
-the fallback only works when it is your own user ID.
-
-The environment is validated at startup with [envin](https://envin.turbostarter.dev);
-a missing or malformed value stops the bot with an explicit message. To inspect
-the schema interactively:
-
-```bash
-bunx @envin/cli@latest dev -c src/shared/config/env.ts
-```
-
-## Run
-
-```bash
-bun run dev             # watch mode, runs from source
-bun run build && bun start   # compile to dist/, then run
-```
-
-With Docker:
-
-```bash
-docker compose up -d --build
-```
-
-The container runs as the unprivileged `bun` user. Because `docker-compose.yml`
-bind-mounts `./data`, the host directory must be writable by that user
-(uid 1000) or SQLite will fail with `EACCES`. Either `chown -R 1000:1000 ./data`
-on the host or switch the volume to a named one.
-
-## Connect it to Telegram Business
-
-1. Telegram → **Settings** → **Telegram Business** → **Chatbots**
-2. Enter the bot's username and connect it
-3. The bot verifies that the connecting account is `OWNER_ID` and rejects
-   everyone else
-
-**If you upgraded from an earlier version,** disconnect and reconnect once. The
-owner check reads the `business_connections` table, which is empty until a
-`business_connection` update arrives, so an older connection is ignored until
-you reconnect.
+Then connect the bot: **Settings → Telegram Business → Chatbots**. It accepts only the account named by `OWNER_ID` and rejects everyone else.
 
 ## Commands
 
-All commands are owner-only and silently ignore everyone else.
+```sh
+bun run dev          # watch mode, straight from source
+bun run build        # compile to dist/
+bun start            # run the compiled bot
 
-| Command                             | Purpose                                     |
-| ----------------------------------- | ------------------------------------------- |
-| `/start`                            | About the bot                               |
-| `/help`                             | Command list                                |
-| `/stats`                            | Archive size and start time                 |
-| `/chats`                            | Known chats and their archiving rules       |
-| `/track <chat_id>`                  | Archive this chat                           |
-| `/untrack <chat_id>`                | Stop archiving this chat                    |
-| `/untrack_reset <chat_id>`          | Remove the rule, fall back to the default   |
-| `/forget <chat_id>`                 | Delete stored messages for a chat           |
-| `/search <word>`                    | Substring search across the archive         |
-| `/history <chat_id> [limit]`        | Recent stored messages in a chat            |
-| `/versions <chat_id> <message_id>`  | Full edit chain for one message             |
-| `/export [chat_id]`                 | Download the archive as JSON                |
-| `/settings`                         | Show retention and the archiving default    |
-| `/settings retention <days>`        | Change how long messages are kept           |
-| `/settings track <allow\|deny>`     | Change the default for chats with no rule   |
-| `/settings reset <retention\|track>`| Fall back to the value from `.env`          |
-
-## What it does
-
-| Event        | Behaviour                                                              |
-| ------------ | ---------------------------------------------------------------------- |
-| New message  | Stored, if the chat is archived                                        |
-| Edited       | Notifies with the old text struck through above the new one            |
-| Deleted      | Notifies with the stored content, then drops the row                   |
-| Connection   | Notifies on connect and disconnect; purges data on disconnect          |
-
-A notification leads with the event and the chat, whose name links to the
-person's Telegram profile — `t.me/<username>` when they have one, otherwise
-`tg://user?id=<id>`. The id form only opens for users who have contacted the
-bot, so the id is also printed as text in the expanded view.
-
-Chat and message ids, the exact timestamp and the follow-up commands sit behind
-an **ℹ️ Batafsil** button, which expands the message in place and turns into
-**▲ Yashirish**. The button is attached when the notification fits one message;
-a longer one is sent expanded from the start.
-
-Notifications are sent before rows are deleted, so a failed send never loses
-data. Messages longer than Telegram's limits (4096 characters, 1024 for
-captions) are split across several messages.
-
-## What is stored
-
-In `DB_PATH`:
-
-- `messages` — latest state of each archived message, including media `file_id`
-- `message_versions` — the edit chain for each message
-- `chats` — chat id, title and last-seen time, for every observed chat, so
-  `/chats` can offer them; no message content
-- `chat_rules` — your per-chat archiving decisions
-- `business_connections` — connection id, owner id, enabled flag
-- `settings` — runtime overrides for the values `/settings` can change
-- `notification_details` — the collapsed and expanded text of a sent
-  notification, so the expand button still works later
-
-Media is referenced by `file_id` and never downloaded. The database file is
-created with mode `600` and its directory with `700`.
-
-Rows older than the retention window are deleted on startup and hourly
-thereafter. `/settings retention` changes that window without a restart.
-`notification_details` keeps its own **7-day** limit, because it holds a copy of
-content that `messages` has already purged; it is also dropped by
-`/forget <chat_id>`.
-
-## Operations
-
-A snapshot of the database is written to `BACKUP_DIR` every `BACKUP_INTERVAL_HOURS`
-and the oldest are pruned beyond `BACKUP_KEEP`. Snapshots use SQLite's
-`VACUUM INTO`, so they are consistent and compact and need no downtime. Take a
-manual one with `bun run db:backup`. A snapshot beside the database survives
-corruption and mistakes, not the loss of the disk — copy `BACKUP_DIR` off the
-machine for that.
-
-`GET /health` on `127.0.0.1:HEALTH_PORT` reports uptime and the archive size.
-It is bound to loopback only, which is all the Docker `HEALTHCHECK` needs
-because it runs inside the container.
-
-Logs are structured JSON from pino. `docker-compose.yml` caps them at 3 files of
-10 MB.
-
-Schema changes are drizzle-kit migrations in `drizzle/`, applied automatically
-on startup:
-
-```bash
-bun run db:generate   # after editing src/shared/db/schema.ts
-bun run db:migrate    # apply manually; startup does this too
+bun run check        # format, lint, typecheck and test
+bun run db:generate  # after editing the schema
+bun run db:backup    # write a snapshot now
 ```
-
-## Development
-
-```bash
-bun run typecheck   # tsc --noEmit
-bun run test        # unit tests (isolated per file; plain `bun test` shares one DB)
-```
-
-`lefthook` runs the typecheck and tests before each commit and lints the commit
-message with `commitlint` (Conventional Commits). Hooks install via
-`bun install`; to set them up manually run `bunx lefthook install`.
 
 ## Layout
 
 Source follows a feature-sliced layout, with imports only ever pointing down:
 
 ```
-src/app/        composition: bot, handlers, commands, entry point
+src/app/        composition: bot, handlers, commands, health, entry point
 src/features/   one slice per user-facing behaviour
 src/entities/   message, chat, connection, notification, settings
 src/shared/     config, db, telegram helpers, formatting, logger
 ```
 
-## Stack
-
-- [grammY](https://grammy.dev) — Telegram bot framework, with `auto-retry` and
-  `transformer-throttler` for rate limits
-- [Bun](https://bun.sh) runtime and `bun:sqlite`
-- [Drizzle ORM](https://orm.drizzle.team) with drizzle-kit migrations
-- [envin](https://envin.turbostarter.dev) + [zod](https://zod.dev) for
-  environment validation
-- [pino](https://getpino.io) for logging, [oxlint and oxfmt](https://oxc.rs) for
-  linting and formatting
+[Architecture](docs/en/architecture.md) walks through it.
 
 ## License
 
-[MIT](./LICENSE)
+MIT. See [LICENSE](./LICENSE).

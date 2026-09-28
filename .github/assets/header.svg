@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" width="1200" height="320" role="img" aria-label="Business Chat Archive — a self-hosted archive for your own Telegram Business chats">
+  <defs>
+    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FF6A1A"/>
+      <stop offset="1" stop-color="#FF6A1A" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="320" fill="#111318"/>
+  <rect x="0" y="0" width="1200" height="3" fill="url(#edge)"/>
+
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+    <text x="80" y="128" fill="#F4F4F2" font-size="54" font-weight="600">business chat archive</text>
+    <text x="80" y="178" fill="#8B929C" font-size="23">a self-hosted archive for your own Telegram Business chats</text>
+
+    <g font-size="19" fill="#5E6672">
+      <text x="80" y="246">edited</text>
+      <text x="196" y="246" fill="#FF6A1A">·</text>
+      <text x="220" y="246">deleted</text>
+      <text x="344" y="246" fill="#FF6A1A">·</text>
+      <text x="368" y="246">searchable</text>
+      <text x="536" y="246" fill="#FF6A1A">·</text>
+      <text x="560" y="246">yours</text>
+    </g>
+  </g>
+
+  <g stroke="#1C2027" stroke-width="2" fill="none">
+    <rect x="980" y="96" width="140" height="140" rx="10"/>
+    <path d="M1010 126h34v34h-34zM1056 126h34v34h-34zM1010 172h34v34h-34z"/>
+  </g>
+  <rect x="1056" y="172" width="34" height="34" rx="2" fill="#FF6A1A" opacity="0.85"/>
+</svg>

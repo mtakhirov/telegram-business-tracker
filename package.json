@@ -11,6 +11,7 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "test": "bun test --isolate",
+    "check": "oxfmt --check && oxlint && tsc --noEmit && bun test --isolate",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
